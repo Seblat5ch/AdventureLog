@@ -1,0 +1,13 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/adventurelog-infra.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "dist/**", "node_modules/**", "cdk.out/**"]
+  },
+  "context": {
+    "environment": "prod",
+    "hostedZoneId": "Z36PXJTJTC9YNC",
+    "domainName": "tesem.dog",
+    "subdomain": "travel"
+  }
+}

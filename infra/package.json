@@ -1,0 +1,23 @@
+{
+  "name": "adventurelog-infra",
+  "version": "0.1.0",
+  "bin": {
+    "adventurelog-infra": "bin/adventurelog-infra.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.2",
+    "aws-cdk": "2.1106.1",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.8.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.238.0",
+    "constructs": "^10.4.2",
+    "source-map-support": "^0.5.21"
+  }
+}

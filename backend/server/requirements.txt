@@ -30,3 +30,8 @@ geojson==3.2.0
 gpxpy==1.6.2
 pymemcache==4.0.0
 legacy-cgi==2.6.3
+
+# AI agent for PDF itinerary import
+strands-agents>=0.1.0
+strands-agents-tools>=0.1.0
+PyMuPDF>=1.24.0
