@@ -12,6 +12,8 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -205,6 +207,7 @@ Be thorough. Use YYYY-MM-DD dates. Use real approximate coordinates for known pl
         )
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PdfImportView(APIView):
     """Upload a travel PDF and auto-create an itinerary using AI."""
     parser_classes = [MultiPartParser]
