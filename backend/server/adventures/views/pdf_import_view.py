@@ -170,7 +170,7 @@ def _run_agent(pdf_text: str, user, pdf_filename: str, pdf_bytes: bytes, collect
 
     # Run the agent
     model = BedrockModel(
-        model_id="anthropic.claude-sonnet-4-20250514-v1:0",
+        model_id="eu.anthropic.claude-sonnet-4-20250514-v1:0",
         region_name=os.getenv('AWS_REGION', 'eu-west-1'),
         max_tokens=4096,
     )

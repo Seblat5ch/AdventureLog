@@ -102,6 +102,30 @@ aws cognito-idp admin-set-user-password --user-pool-id $POOL_ID \
   --username admin@tesem.dog --password TravelAdmin2026! --permanent --region eu-west-1
 ```
 
+## Promote a User to Admin
+
+Cognito SSO auto-creates regular Django users on first login. To grant admin/staff access, exec into the backend container:
+
+```bash
+# Find the running backend task
+TASK_ID=$(aws ecs list-tasks --cluster prod-adventurelog \
+  --service-name prod-adventurelog-backend --region eu-west-1 \
+  --query "taskArns[0]" --output text | awk -F/ '{print $NF}')
+
+# Shell into the container
+aws ecs execute-command --cluster prod-adventurelog \
+  --task $TASK_ID --container backend --interactive --command /bin/bash --region eu-west-1
+```
+
+Then inside the container:
+```bash
+# List all users
+python /code/manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); [print(u.username, u.email, u.is_staff) for u in User.objects.all()]"
+
+# Promote a user to superuser
+python /code/manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); u = User.objects.get(email='sebastian@tesem.dog'); u.is_staff = True; u.is_superuser = True; u.save(); print('Done:', u.username)"
+```
+
 ## Configuration
 
 `cdk.json` context:
