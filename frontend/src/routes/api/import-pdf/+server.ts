@@ -3,48 +3,38 @@ const endpoint = PUBLIC_SERVER_URL || 'http://localhost:8000';
 import { fetchCSRFToken } from '$lib/index.server';
 import { json } from '@sveltejs/kit';
 
-/** Handle PDF upload — forwards the multipart body as-is (binary safe) */
-export async function POST({ request, fetch, cookies }) {
+/** Handle PDF upload — forwards the multipart body to Django backend */
+export async function POST({ request, cookies }) {
 	const csrfToken = await fetchCSRFToken();
 	if (!csrfToken) {
 		return json({ error: 'CSRF token is missing' }, { status: 400 });
 	}
 
-	// Get the user's session cookie for authentication
 	const sessionid = cookies.get('sessionid') || '';
+	if (!sessionid) {
+		return json({ error: 'Not authenticated. Please log in first.' }, { status: 401 });
+	}
 
 	try {
 		const body = await request.arrayBuffer();
 		const contentType = request.headers.get('content-type') || '';
 
-		// Forward Cognito OIDC headers if present (for SSO auth)
-		const headers: Record<string, string> = {
-			'Content-Type': contentType,
-			'X-CSRFToken': csrfToken,
-			Cookie: `csrftoken=${csrfToken}; sessionid=${sessionid}`
-		};
-
-		// Pass through ALB Cognito headers for the middleware
-		const oidcData = request.headers.get('x-amzn-oidc-data');
-		if (oidcData) headers['x-amzn-oidc-data'] = oidcData;
-		const oidcIdentity = request.headers.get('x-amzn-oidc-identity');
-		if (oidcIdentity) headers['x-amzn-oidc-identity'] = oidcIdentity;
-		const oidcToken = request.headers.get('x-amzn-oidc-accesstoken');
-		if (oidcToken) headers['x-amzn-oidc-accesstoken'] = oidcToken;
-
-		const response = await fetch(`${endpoint}/api/import-pdf/`, {
+		// Use native fetch (not SvelteKit's event.fetch) to call the backend directly
+		const response = await globalThis.fetch(`${endpoint}/api/import-pdf/`, {
 			method: 'POST',
-			headers,
+			headers: {
+				'Content-Type': contentType,
+				'X-CSRFToken': csrfToken,
+				'Cookie': `csrftoken=${csrfToken}; sessionid=${sessionid}`
+			},
 			body: body
 		});
 
-		const responseData = await response.arrayBuffer();
-		const cleanHeaders = new Headers(response.headers);
-		cleanHeaders.delete('set-cookie');
+		const responseData = await response.text();
 
 		return new Response(responseData, {
 			status: response.status,
-			headers: cleanHeaders
+			headers: { 'Content-Type': response.headers.get('content-type') || 'application/json' }
 		});
 	} catch (error) {
 		console.error('Error forwarding PDF import:', error);
