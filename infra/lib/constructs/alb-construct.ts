@@ -162,12 +162,13 @@ export class AlbConstruct extends Construct {
           origin: new origins.HttpOrigin(this.loadBalancer.loadBalancerDnsName, {
             protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
             httpsPort: 443,
-            // Custom header so ALB knows traffic is from CloudFront
+            readTimeout: cdk.Duration.seconds(60), // Max default for CloudFront
             customHeaders: { 'X-CloudFront-Secret': `${props.environment}-adventurelog-cf` },
           }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED, // SSR app, don't cache
+          // UseOriginCacheControlHeaders forwards ALL cookies (needed for ALB Cognito auth)
+          cachePolicy: cloudfront.CachePolicy.fromCachePolicyId(this, 'CdnCachePolicy', '83da9c7e-98b4-4e11-a168-04f0df8e2c65'),
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
         },
         // Allow large file uploads (PDF import)

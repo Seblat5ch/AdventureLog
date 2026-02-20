@@ -87,7 +87,10 @@ export class FargateConstruct extends Construct {
     // Bedrock access for Strands AI agent (PDF import)
     backendTaskRole.addToPolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: ['arn:aws:bedrock:*::foundation-model/*'],
+      resources: [
+        'arn:aws:bedrock:*::foundation-model/*',
+        'arn:aws:bedrock:*:*:inference-profile/*',
+      ],
     }));
 
     const backendLogGroup = new logs.LogGroup(this, 'BackendLogs', {

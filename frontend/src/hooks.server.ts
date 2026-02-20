@@ -11,16 +11,14 @@ export const authHook: Handle = async ({ event, resolve }) => {
 		// If no Django session but ALB Cognito headers are present, auto-login
 		if (!sessionid && event.request.headers.get('x-amzn-oidc-data')) {
 			const serverEndpoint = PUBLIC_SERVER_URL || 'http://localhost:8000';
-			const csrfToken = await fetchCSRFToken();
 
-			// Hit the backend with the Cognito headers — the middleware will create/login the user
-			const autoLoginFetch = await event.fetch(`${serverEndpoint}/auth/user-metadata/`, {
+			// Use globalThis.fetch (not event.fetch) for the internal backend call
+			// The Cognito middleware reads x-amzn-oidc-* headers and auto-creates/logs in the user
+			const autoLoginFetch = await globalThis.fetch(`${serverEndpoint}/api/sso-login/`, {
 				headers: {
 					'x-amzn-oidc-data': event.request.headers.get('x-amzn-oidc-data') || '',
 					'x-amzn-oidc-identity': event.request.headers.get('x-amzn-oidc-identity') || '',
 					'x-amzn-oidc-accesstoken': event.request.headers.get('x-amzn-oidc-accesstoken') || '',
-					'X-CSRFToken': csrfToken,
-					Cookie: `csrftoken=${csrfToken}`
 				}
 			});
 
