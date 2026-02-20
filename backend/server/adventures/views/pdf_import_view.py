@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 
 from adventures.models import (
     Category, Checklist, ChecklistItem, Collection, ContentAttachment,
+    CollectionItineraryDay, CollectionItineraryItem,
     Location, Lodging, Note, Transportation,
 )
 from adventures.serializers import CollectionSerializer
@@ -48,6 +49,58 @@ def _extract_pdf_text(pdf_bytes: bytes) -> str:
             return "\n".join(page.extract_text() or "" for page in pdf.pages)
     except ImportError:
         return ""
+
+
+def _auto_generate_itinerary(collection):
+    """Create itinerary days and assign dated items to them."""
+    from datetime import timedelta
+    if not collection.start_date or not collection.end_date:
+        return
+
+    # Create a day entry for each date in the trip range
+    current = collection.start_date
+    day_num = 1
+    while current <= collection.end_date:
+        CollectionItineraryDay.objects.get_or_create(
+            collection=collection, date=current,
+            defaults={'name': f'Day {day_num}'}
+        )
+        current += timedelta(days=1)
+        day_num += 1
+
+    # Assign transportations to their dates
+    order_counter = {}
+    for t in Transportation.objects.filter(collection=collection, date__isnull=False):
+        d = t.date.date() if hasattr(t.date, 'date') else t.date
+        order_counter.setdefault(d, 0)
+        order_counter[d] += 1
+        ct = ContentType.objects.get_for_model(Transportation)
+        CollectionItineraryItem.objects.get_or_create(
+            collection=collection, content_type=ct, object_id=t.id,
+            defaults={'date': d, 'order': order_counter[d]}
+        )
+
+    # Assign lodgings to their check-in dates
+    for l in Lodging.objects.filter(collection=collection, check_in__isnull=False):
+        d = l.check_in.date() if hasattr(l.check_in, 'date') else l.check_in
+        order_counter.setdefault(d, 0)
+        order_counter[d] += 1
+        ct = ContentType.objects.get_for_model(Lodging)
+        CollectionItineraryItem.objects.get_or_create(
+            collection=collection, content_type=ct, object_id=l.id,
+            defaults={'date': d, 'order': order_counter[d]}
+        )
+
+    # Assign notes with dates
+    for n in Note.objects.filter(collection=collection, date__isnull=False):
+        d = n.date.date() if hasattr(n.date, 'date') else n.date
+        order_counter.setdefault(d, 0)
+        order_counter[d] += 1
+        ct = ContentType.objects.get_for_model(Note)
+        CollectionItineraryItem.objects.get_or_create(
+            collection=collection, content_type=ct, object_id=n.id,
+            defaults={'date': d, 'order': order_counter[d]}
+        )
 
 
 def _run_agent(pdf_text: str, user, pdf_filename: str, pdf_bytes: bytes, collection_id_holder: dict):
@@ -192,6 +245,10 @@ Be thorough. Use YYYY-MM-DD dates. Use real approximate coordinates for known pl
     )
 
     agent(f"Parse this travel itinerary and create a complete trip:\n\n{pdf_text}")
+
+    # Auto-generate itinerary days and assign items to their dates
+    if ctx['collection']:
+        _auto_generate_itinerary(ctx['collection'])
 
     # Attach the original PDF as a note attachment
     if ctx['collection']:
