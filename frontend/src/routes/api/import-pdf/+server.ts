@@ -10,22 +10,32 @@ export async function POST({ request, fetch, cookies }) {
 		return json({ error: 'CSRF token is missing' }, { status: 400 });
 	}
 
-	const cookieHeader = `csrftoken=${csrfToken}; Path=/; HttpOnly; SameSite=Lax`;
+	// Get the user's session cookie for authentication
+	const sessionid = cookies.get('sessionid') || '';
 
 	try {
-		// Forward the raw request body (multipart/form-data) without converting to text
 		const body = await request.arrayBuffer();
 		const contentType = request.headers.get('content-type') || '';
 
+		// Forward Cognito OIDC headers if present (for SSO auth)
+		const headers: Record<string, string> = {
+			'Content-Type': contentType,
+			'X-CSRFToken': csrfToken,
+			Cookie: `csrftoken=${csrfToken}; sessionid=${sessionid}`
+		};
+
+		// Pass through ALB Cognito headers for the middleware
+		const oidcData = request.headers.get('x-amzn-oidc-data');
+		if (oidcData) headers['x-amzn-oidc-data'] = oidcData;
+		const oidcIdentity = request.headers.get('x-amzn-oidc-identity');
+		if (oidcIdentity) headers['x-amzn-oidc-identity'] = oidcIdentity;
+		const oidcToken = request.headers.get('x-amzn-oidc-accesstoken');
+		if (oidcToken) headers['x-amzn-oidc-accesstoken'] = oidcToken;
+
 		const response = await fetch(`${endpoint}/api/import-pdf/`, {
 			method: 'POST',
-			headers: {
-				'Content-Type': contentType,
-				'X-CSRFToken': csrfToken,
-				Cookie: cookieHeader
-			},
-			body: body,
-			credentials: 'include'
+			headers,
+			body: body
 		});
 
 		const responseData = await response.arrayBuffer();

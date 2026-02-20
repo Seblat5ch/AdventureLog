@@ -97,6 +97,9 @@ class CognitoAlbAuthMiddleware:
                 safe_username = f'{base_username}{counter}'
                 counter += 1
 
+            # First user gets superuser/staff privileges (bootstrap admin)
+            is_first_user = User.objects.count() == 0
+
             user = User.objects.create_user(
                 username=safe_username,
                 email=email,
@@ -104,6 +107,9 @@ class CognitoAlbAuthMiddleware:
                 last_name=claims.get('family_name', ''),
             )
             user.set_unusable_password()
+            if is_first_user:
+                user.is_staff = True
+                user.is_superuser = True
             user.save()
             logger.info(f'Auto-created Django user {safe_username} from Cognito')
             return user
