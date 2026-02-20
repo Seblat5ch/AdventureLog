@@ -27,13 +27,13 @@ export class VpcConstruct extends Construct {
       enableDnsSupport: true,
     });
 
-    // ALB — accepts HTTP/HTTPS from internet
+    // ALB — CloudFront sits in front, ALB only needs HTTPS (443)
+    // Port 80 removed to prevent DyePack from flagging the ALB ENI IPs
     this.albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSg', {
       vpc: this.vpc,
       description: 'ALB security group - HTTP/HTTPS from internet',
       allowAllOutbound: true,
     });
-    this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP');
     this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS');
 
     // Fargate — accepts traffic from ALB only
@@ -44,7 +44,6 @@ export class VpcConstruct extends Construct {
     });
     this.fargateSecurityGroup.addIngressRule(this.albSecurityGroup, ec2.Port.tcp(80), 'Backend from ALB');
     this.fargateSecurityGroup.addIngressRule(this.albSecurityGroup, ec2.Port.tcp(3000), 'Frontend from ALB');
-    // Allow backend<->frontend communication within the SG
     this.fargateSecurityGroup.addIngressRule(this.fargateSecurityGroup, ec2.Port.tcp(80), 'Backend from Fargate');
     this.fargateSecurityGroup.addIngressRule(this.fargateSecurityGroup, ec2.Port.tcp(8000), 'Backend direct from Fargate');
 
@@ -64,7 +63,6 @@ export class VpcConstruct extends Construct {
     });
     this.efsSecurityGroup.addIngressRule(this.fargateSecurityGroup, ec2.Port.tcp(2049), 'NFS from Fargate');
 
-    // Tags
     const resources = [this.vpc, this.albSecurityGroup, this.fargateSecurityGroup, this.databaseSecurityGroup, this.efsSecurityGroup];
     resources.forEach(r => cdk.Tags.of(r).add('Environment', props.environment));
   }
