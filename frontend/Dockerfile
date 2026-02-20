@@ -1,5 +1,5 @@
 # Use this image as the platform to build the app
-FROM node:22-alpine AS external-website
+FROM public.ecr.aws/docker/library/node:22-alpine AS external-website
 
 # Metadata labels for the AdventureLog image
 LABEL maintainer="Sean Morley" \

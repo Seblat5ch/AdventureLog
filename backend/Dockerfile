@@ -1,5 +1,5 @@
 # Stage 1: Build stage with dependencies
-FROM python:3.13-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.13-slim AS builder
 
 # Metadata labels
 LABEL maintainer="Sean Morley" \
@@ -35,7 +35,7 @@ RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Final image with runtime dependencies
-FROM python:3.13-slim
+FROM public.ecr.aws/docker/library/python:3.13-slim
 WORKDIR /code
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
