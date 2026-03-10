@@ -50,7 +50,8 @@
 
 			const res = await fetch('/api/import-pdf/', {
 				method: 'POST',
-				body: formData
+				body: formData,
+				credentials: 'include'
 			});
 
 			if (res.ok) {
