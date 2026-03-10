@@ -62,19 +62,36 @@ async function handleRequest(
 		return json({ error: 'CSRF token is missing or invalid' }, { status: 400 });
 	}
 
-	// Set the new csrf token in both headers and cookies
-	const cookieHeader = `csrftoken=${csrfToken}; Path=/; HttpOnly; SameSite=Lax`;
+	// Build cookie header: preserve the original cookies (especially sessionid) and add/replace csrftoken
+	const originalCookie = request.headers.get('cookie') || '';
+	// Remove any existing csrftoken from the original cookies, then append the fresh one
+	const filteredCookies = originalCookie
+		.split(';')
+		.map((c: string) => c.trim())
+		.filter((c: string) => c && !c.startsWith('csrftoken='))
+		.join('; ');
+	const cookieHeader = filteredCookies
+		? `${filteredCookies}; csrftoken=${csrfToken}`
+		: `csrftoken=${csrfToken}`;
 
 	try {
+		// Use arrayBuffer for body to properly handle binary data (e.g. multipart file uploads)
+		const body =
+			request.method !== 'GET' && request.method !== 'HEAD'
+				? await request.arrayBuffer()
+				: undefined;
+
+		// Preserve the original Content-Type header (important for multipart/form-data boundaries)
+		const requestHeaders: Record<string, string> = {
+			...Object.fromEntries(headers),
+			'X-CSRFToken': csrfToken,
+			Cookie: cookieHeader,
+		};
+
 		const response = await fetch(targetUrl, {
 			method: request.method,
-			headers: {
-				...Object.fromEntries(headers),
-				'X-CSRFToken': csrfToken,
-				Cookie: cookieHeader
-			},
-			body:
-				request.method !== 'GET' && request.method !== 'HEAD' ? await request.text() : undefined,
+			headers: requestHeaders,
+			body,
 			credentials: 'include' // This line ensures cookies are sent with the request
 		});
 

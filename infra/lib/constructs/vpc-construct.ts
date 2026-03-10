@@ -27,14 +27,22 @@ export class VpcConstruct extends Construct {
       enableDnsSupport: true,
     });
 
-    // ALB — CloudFront sits in front, ALB only needs HTTPS (443)
+    // ALB — CloudFront sits in front, restrict to CloudFront prefix list only
     // Port 80 removed to prevent DyePack from flagging the ALB ENI IPs
     this.albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSg', {
       vpc: this.vpc,
-      description: 'ALB security group - HTTP/HTTPS from internet',
+      description: 'ALB security group - HTTPS from CloudFront only',
       allowAllOutbound: true,
     });
-    this.albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS');
+    // Look up the CloudFront origin-facing prefix list (ID varies by region)
+    const cfPrefixList = ec2.PrefixList.fromLookup(this, 'CloudFrontPrefixList', {
+      prefixListName: 'com.amazonaws.global.cloudfront.origin-facing',
+    });
+    this.albSecurityGroup.addIngressRule(
+      ec2.Peer.prefixList(cfPrefixList.prefixListId),
+      ec2.Port.tcp(443),
+      'HTTPS from CloudFront only',
+    );
 
     // Fargate — accepts traffic from ALB only
     this.fargateSecurityGroup = new ec2.SecurityGroup(this, 'FargateSg', {
