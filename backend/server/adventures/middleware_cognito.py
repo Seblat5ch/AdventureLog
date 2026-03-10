@@ -97,8 +97,10 @@ class CognitoAlbAuthMiddleware:
                 safe_username = f'{base_username}{counter}'
                 counter += 1
 
-            # First user gets superuser/staff privileges (bootstrap admin)
-            is_first_user = User.objects.count() == 0
+            # First Cognito user gets superuser/staff privileges
+            # (the entrypoint creates a bootstrap 'admin' user, so check for real users instead)
+            real_users = User.objects.exclude(email='admin@example.com').count()
+            is_first_real_user = real_users == 0
 
             user = User.objects.create_user(
                 username=safe_username,
@@ -107,7 +109,7 @@ class CognitoAlbAuthMiddleware:
                 last_name=claims.get('family_name', ''),
             )
             user.set_unusable_password()
-            if is_first_user:
+            if is_first_real_user:
                 user.is_staff = True
                 user.is_superuser = True
             user.save()
