@@ -304,6 +304,13 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '1000/day',
+        'image_proxy': '60/minute',
+    },
 }
 
 if DEBUG:
@@ -362,7 +369,7 @@ PUBLIC_URL = getenv('PUBLIC_URL', 'http://localhost:8000')
 # ADVENTURELOG_CDN_URL = getenv('ADVENTURELOG_CDN_URL', 'https://cdn.adventurelog.app')
 
 # Major release version of AdventureLog, not including the patch version date.
-ADVENTURELOG_RELEASE_VERSION = 'v0.11.0'
+ADVENTURELOG_RELEASE_VERSION = 'v0.12.0'
 
 # https://github.com/dr5hn/countries-states-cities-database/tags
 COUNTRY_REGION_JSON_VERSION = 'v3.0'
