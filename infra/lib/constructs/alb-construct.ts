@@ -124,10 +124,11 @@ export class AlbConstruct extends Construct {
         defaultAction: cognitoAuth,
       });
 
-      // Backend paths through Cognito
-      httpsListener.addAction('BackendApiRoutes', {
+      // Backend paths — only routes the browser never calls via fetch()
+      // /api/* goes through SvelteKit's proxy (frontend), NOT directly to backend
+      httpsListener.addAction('BackendStaticRoutes', {
         priority: 10,
-        conditions: [elbv2.ListenerCondition.pathPatterns(['/api/*', '/auth/*', '/admin/*', '/media/*', '/static/*'])],
+        conditions: [elbv2.ListenerCondition.pathPatterns(['/media/*', '/static/*', '/admin/*'])],
         action: new actions.AuthenticateCognitoAction({
           userPool, userPoolClient, userPoolDomain,
           sessionTimeout: cdk.Duration.days(7),
@@ -195,9 +196,9 @@ export class AlbConstruct extends Construct {
       const httpListener = this.loadBalancer.addListener('Http', {
         port: 80, protocol: elbv2.ApplicationProtocol.HTTP, defaultTargetGroups: [frontendTg],
       });
-      httpListener.addTargetGroups('BackendApiRoutes', {
+      httpListener.addTargetGroups('BackendStaticRoutes', {
         targetGroups: [backendTg], priority: 10,
-        conditions: [elbv2.ListenerCondition.pathPatterns(['/api/*', '/auth/*', '/admin/*', '/media/*', '/static/*'])],
+        conditions: [elbv2.ListenerCondition.pathPatterns(['/media/*', '/static/*', '/admin/*'])],
       });
       httpListener.addTargetGroups('BackendAccountRoutes', {
         targetGroups: [backendTg], priority: 11,

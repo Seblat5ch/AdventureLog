@@ -64,9 +64,16 @@ async function handleRequest(
 		return json({ error: 'CSRF token is missing or invalid' }, { status: 400 });
 	}
 
-	// Set the new csrf token in both headers and cookies
-	const sessionId = cookies.get('sessionid');
-	const cookieHeader = `csrftoken=${csrfToken}` + (sessionId ? `; sessionid=${sessionId}` : '');
+	// Build cookie header: preserve the original cookies (especially sessionid) and add/replace csrftoken
+	const originalCookie = request.headers.get('cookie') || '';
+	const filteredCookies = originalCookie
+		.split(';')
+		.map((c: string) => c.trim())
+		.filter((c: string) => c && !c.startsWith('csrftoken='))
+		.join('; ');
+	const cookieHeader = filteredCookies
+		? `${filteredCookies}; csrftoken=${csrfToken}`
+		: `csrftoken=${csrfToken}`;
 
 	try {
 		const response = await fetch(targetUrl, {
