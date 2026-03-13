@@ -47,7 +47,21 @@ export class AlbConstruct extends Construct {
       defaultAction: { allow: {} },
       visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: `${props.environment}-adventurelog-waf`, sampledRequestsEnabled: true },
       rules: [
-        { name: 'CommonRuleSet', priority: 1, overrideAction: { none: {} }, statement: { managedRuleGroupStatement: { vendorName: 'AWS', name: 'AWSManagedRulesCommonRuleSet' } }, visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'CommonRuleSet', sampledRequestsEnabled: true } },
+        {
+          name: 'CommonRuleSet', priority: 1, overrideAction: { none: {} },
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: 'AWS', name: 'AWSManagedRulesCommonRuleSet',
+              // Exclude rules that false-positive on legitimate app traffic
+              excludedRules: [
+                { name: 'SizeRestrictions_BODY' },        // Blocks PDF/image uploads (>8KB body)
+                { name: 'CrossSiteScripting_BODY' },      // False positive on markdown/HTML content in JSON
+                { name: 'NoUserAgent_HEADER' },            // Internal service-to-service calls have no UA
+              ],
+            },
+          },
+          visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'CommonRuleSet', sampledRequestsEnabled: true },
+        },
         { name: 'KnownBadInputs', priority: 2, overrideAction: { none: {} }, statement: { managedRuleGroupStatement: { vendorName: 'AWS', name: 'AWSManagedRulesKnownBadInputsRuleSet' } }, visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'KnownBadInputs', sampledRequestsEnabled: true } },
         { name: 'IpReputation', priority: 3, overrideAction: { none: {} }, statement: { managedRuleGroupStatement: { vendorName: 'AWS', name: 'AWSManagedRulesAmazonIpReputationList' } }, visibilityConfig: { cloudWatchMetricsEnabled: true, metricName: 'IpReputation', sampledRequestsEnabled: true } },
       ],
