@@ -44,7 +44,7 @@
 			await new Promise((r) => setTimeout(r, 3000));
 
 			try {
-				const res = await fetch(`/collections/import?task_id=${taskId}`);
+				const res = await fetch(`/collections/import/upload?task_id=${taskId}`);
 				if (!res.ok) {
 					addToast('error', 'Failed to check import status.');
 					return;
@@ -81,7 +81,7 @@
 			const formData = new FormData();
 			formData.append('pdf', selectedFile);
 
-			const res = await fetch('/collections/import', {
+			const res = await fetch('/collections/import/upload', {
 				method: 'POST',
 				body: formData
 			});
