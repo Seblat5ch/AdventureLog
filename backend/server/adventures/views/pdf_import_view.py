@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from adventures.models import (
-    Category, Checklist, ChecklistItem, Collection, ContentAttachment,
+    Category, Checklist, ChecklistItem, Collection, ContentAttachment, ContentImage,
     CollectionItineraryDay, CollectionItineraryItem,
     Location, Lodging, Note, Transportation,
 )
@@ -232,6 +232,71 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 )
             return json.dumps({'id': str(cl.id), 'name': cl.name, 'items': len(items)})
 
+        @tool
+        def add_image_to_location(location_id: str, search_query: str) -> str:
+            """Fetch a Wikipedia image for a location and attach it.
+            Args:
+                location_id: The location ID returned by add_location
+                search_query: Search term for Wikipedia (e.g. 'Bwindi Impenetrable National Park')
+            """
+            import requests as req
+            try:
+                loc = Location.objects.get(id=location_id)
+                # Search Wikipedia for the page
+                search_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{search_query.replace(' ', '_')}"
+                resp = req.get(search_url, timeout=10, headers={'User-Agent': 'AdventureLog/1.0'})
+                if resp.status_code != 200:
+                    return json.dumps({'error': 'Wikipedia page not found'})
+                data = resp.json()
+                image_url = data.get('thumbnail', {}).get('source') or data.get('originalimage', {}).get('source')
+                if not image_url:
+                    return json.dumps({'error': 'No image found on Wikipedia'})
+                # Download the image
+                img_resp = req.get(image_url, timeout=10, headers={'User-Agent': 'AdventureLog/1.0'})
+                if img_resp.status_code != 200:
+                    return json.dumps({'error': 'Failed to download image'})
+                # Save as ContentImage
+                from django.core.files.base import ContentFile as CF
+                ct = ContentType.objects.get_for_model(Location)
+                img = ContentImage(
+                    user=ctx['user'],
+                    content_type=ct,
+                    object_id=loc.id,
+                    is_primary=True,
+                )
+                ext = image_url.split('.')[-1].split('?')[0][:4]
+                img.image.save(f"{loc.name[:30]}.{ext}", CF(img_resp.content), save=True)
+                return json.dumps({'id': str(img.id), 'location': loc.name, 'image_url': image_url})
+            except Exception as e:
+                return json.dumps({'error': str(e)})
+
+        @tool
+        def schedule_location_for_day(location_id: str, visit_date: str, order: int = 1) -> str:
+            """Assign a location to a specific day in the itinerary.
+            Args:
+                location_id: The location ID returned by add_location
+                visit_date: YYYY-MM-DD date when this location is visited
+                order: Order within the day (1 = first activity, 2 = second, etc.)
+            """
+            try:
+                loc = Location.objects.get(id=location_id)
+                ct = ContentType.objects.get_for_model(Location)
+                d = date.fromisoformat(visit_date)
+                # Ensure the itinerary day exists
+                if ctx['collection']:
+                    CollectionItineraryDay.objects.get_or_create(
+                        collection=ctx['collection'], date=d,
+                        defaults={'name': f'Day {(d - ctx["collection"].start_date).days + 1}'}
+                    )
+                    item, created = CollectionItineraryItem.objects.get_or_create(
+                        collection=ctx['collection'], content_type=ct, object_id=loc.id,
+                        defaults={'date': d, 'order': order}
+                    )
+                    return json.dumps({'id': str(item.id), 'location': loc.name, 'date': visit_date, 'created': created})
+                return json.dumps({'error': 'No collection created yet'})
+            except Exception as e:
+                return json.dumps({'error': str(e)})
+
         model = BedrockModel(
             model_id="eu.anthropic.claude-sonnet-4-20250514-v1:0",
             region_name=os.getenv('AWS_REGION', 'eu-west-1'),
@@ -240,16 +305,19 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
 
         agent = Agent(
             model=model,
-            tools=[create_trip, add_location, add_transportation, add_lodging, add_note, add_checklist],
+            tools=[create_trip, add_location, add_transportation, add_lodging, add_note, add_checklist, add_image_to_location, schedule_location_for_day],
             system_prompt="""You are a travel itinerary parser for AdventureLog.
 Given travel PDF text, you must:
 1. Call create_trip with the trip name, description, and date range.
 2. For each destination, call add_location with approximate lat/lng for known places.
-3. For each flight/bus/transfer, call add_transportation.
-4. For each hotel/lodge/camp, call add_lodging with check-in/check-out dates.
-5. If there are travel tips or general advice, call add_note.
-6. If there are packing lists, call add_checklist.
-Be thorough. Use YYYY-MM-DD dates. Use real approximate coordinates for known places.""",
+3. For each location, call add_image_to_location to fetch a Wikipedia image for it.
+4. For each location, call schedule_location_for_day to assign it to the correct day in the itinerary.
+5. For each flight/bus/transfer, call add_transportation.
+6. For each hotel/lodge/camp, call add_lodging with check-in/check-out dates.
+7. If there are travel tips or general advice, call add_note.
+8. If there are packing lists, call add_checklist.
+Be thorough. Use YYYY-MM-DD dates. Use real approximate coordinates for known places.
+IMPORTANT: After adding each location, always call add_image_to_location and schedule_location_for_day for it.""",
         )
 
         agent(f"Parse this travel itinerary and create a complete trip:\n\n{pdf_text}")
