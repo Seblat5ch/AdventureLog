@@ -60,8 +60,10 @@ def _extract_pdf_text(pdf_bytes: bytes) -> str:
 
 
 def _auto_generate_itinerary(collection):
-    """Create itinerary days and assign dated items to them."""
+    """Create itinerary days and assign dated items that the agent didn't already schedule."""
     from datetime import timedelta
+    from django.db.models import Max
+
     if not collection.start_date or not collection.end_date:
         return
 
@@ -75,36 +77,39 @@ def _auto_generate_itinerary(collection):
         current += timedelta(days=1)
         day_num += 1
 
-    order_counter = {}
+    def _next_order(d):
+        """Get the next available order number for a given date."""
+        max_order = CollectionItineraryItem.objects.filter(
+            collection=collection, date=d
+        ).aggregate(Max('order'))['order__max']
+        return (max_order or 0) + 1
+
     for t in Transportation.objects.filter(collection=collection, date__isnull=False):
         d = t.date.date() if hasattr(t.date, 'date') else t.date
-        order_counter.setdefault(d, 0)
-        order_counter[d] += 1
         ct = ContentType.objects.get_for_model(Transportation)
-        CollectionItineraryItem.objects.get_or_create(
-            collection=collection, content_type=ct, object_id=t.id,
-            defaults={'date': d, 'order': order_counter[d]}
-        )
+        if not CollectionItineraryItem.objects.filter(collection=collection, content_type=ct, object_id=t.id).exists():
+            CollectionItineraryItem.objects.create(
+                collection=collection, content_type=ct, object_id=t.id,
+                date=d, order=_next_order(d)
+            )
 
     for l in Lodging.objects.filter(collection=collection, check_in__isnull=False):
         d = l.check_in.date() if hasattr(l.check_in, 'date') else l.check_in
-        order_counter.setdefault(d, 0)
-        order_counter[d] += 1
         ct = ContentType.objects.get_for_model(Lodging)
-        CollectionItineraryItem.objects.get_or_create(
-            collection=collection, content_type=ct, object_id=l.id,
-            defaults={'date': d, 'order': order_counter[d]}
-        )
+        if not CollectionItineraryItem.objects.filter(collection=collection, content_type=ct, object_id=l.id).exists():
+            CollectionItineraryItem.objects.create(
+                collection=collection, content_type=ct, object_id=l.id,
+                date=d, order=_next_order(d)
+            )
 
     for n in Note.objects.filter(collection=collection, date__isnull=False):
         d = n.date.date() if hasattr(n.date, 'date') else n.date
-        order_counter.setdefault(d, 0)
-        order_counter[d] += 1
         ct = ContentType.objects.get_for_model(Note)
-        CollectionItineraryItem.objects.get_or_create(
-            collection=collection, content_type=ct, object_id=n.id,
-            defaults={'date': d, 'order': order_counter[d]}
-        )
+        if not CollectionItineraryItem.objects.filter(collection=collection, content_type=ct, object_id=n.id).exists():
+            CollectionItineraryItem.objects.create(
+                collection=collection, content_type=ct, object_id=n.id,
+                date=d, order=_next_order(d)
+            )
 
 
 def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
