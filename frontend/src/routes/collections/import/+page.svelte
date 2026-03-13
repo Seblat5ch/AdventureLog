@@ -38,11 +38,44 @@
 		}
 	}
 
+	async function pollTaskStatus(taskId: string) {
+		const maxAttempts = 60; // 60 * 3s = 3 minutes max
+		for (let i = 0; i < maxAttempts; i++) {
+			await new Promise((r) => setTimeout(r, 3000));
+
+			try {
+				const res = await fetch(`/api/import-pdf/${taskId}/`);
+				if (!res.ok) {
+					addToast('error', 'Failed to check import status.');
+					return;
+				}
+				const data = await res.json();
+
+				if (data.status === 'done' && data.collection) {
+					addToast('success', `Trip "${data.collection.name}" created!`);
+					goto(`/collections/${data.collection.id}`);
+					return;
+				} else if (data.status === 'error') {
+					addToast('error', data.error || 'AI agent failed.');
+					return;
+				}
+
+				// Still running — update progress
+				if (data.status === 'running') {
+					uploadProgress = 'AI is parsing your itinerary...';
+				}
+			} catch {
+				// Network blip, keep polling
+			}
+		}
+		addToast('error', 'Import timed out. Check your collections — it may still complete.');
+	}
+
 	async function uploadPdf() {
 		if (!selectedFile) return;
 
 		isUploading = true;
-		uploadProgress = 'Uploading PDF and generating itinerary with AI...';
+		uploadProgress = 'Uploading PDF...';
 
 		try {
 			const formData = new FormData();
@@ -50,14 +83,19 @@
 
 			const res = await fetch('/api/import-pdf/', {
 				method: 'POST',
-				body: formData,
-				credentials: 'include'
+				body: formData
 			});
 
-			if (res.ok) {
-				const collection = await res.json();
-				addToast('success', `Trip "${collection.name}" created!`);
-				goto(`/collections/${collection.id}`);
+			if (res.ok || res.status === 202) {
+				const data = await res.json();
+				if (data.task_id) {
+					uploadProgress = 'AI is generating your itinerary...';
+					await pollTaskStatus(data.task_id);
+				} else if (data.id) {
+					// Fallback: synchronous response (shouldn't happen but just in case)
+					addToast('success', `Trip "${data.name}" created!`);
+					goto(`/collections/${data.id}`);
+				}
 			} else {
 				const err = await res.json();
 				addToast('error', err.error || 'Failed to import PDF.');
@@ -82,7 +120,6 @@
 		flights, and notes.
 	</p>
 
-	<!-- Drop zone -->
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
 		class="border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer
@@ -99,7 +136,7 @@
 			<div class="flex flex-col items-center gap-4">
 				<span class="loading loading-spinner loading-lg text-primary"></span>
 				<p class="text-lg font-medium">{uploadProgress}</p>
-				<p class="text-sm text-base-content/50">This may take 15-30 seconds...</p>
+				<p class="text-sm text-base-content/50">This may take up to a minute...</p>
 			</div>
 		{:else if selectedFile}
 			<div class="flex flex-col items-center gap-4">

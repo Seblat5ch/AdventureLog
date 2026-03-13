@@ -35,6 +35,7 @@ export class AlbConstruct extends Construct {
       internetFacing: true,
       securityGroup: props.securityGroup,
       loadBalancerName: `${props.environment}-adventurelog`,
+      idleTimeout: cdk.Duration.seconds(120), // Match gunicorn timeout for long AI agent requests
     });
 
     this.loadBalancerDnsName = this.loadBalancer.loadBalancerDnsName;
@@ -163,7 +164,7 @@ export class AlbConstruct extends Construct {
           origin: new origins.HttpOrigin(this.loadBalancer.loadBalancerDnsName, {
             protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
             httpsPort: 443,
-            readTimeout: cdk.Duration.seconds(60),
+            readTimeout: cdk.Duration.seconds(120), // AI agent can take 30-60s for large PDFs
             customHeaders: { 'X-CloudFront-Secret': `${props.environment}-adventurelog-cf` },
           }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

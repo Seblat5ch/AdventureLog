@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from adventures.views import *
-from adventures.views.pdf_import_view import PdfImportView
+from adventures.views.pdf_import_view import PdfImportView, PdfImportStatusView
 from adventures.views.sso_login_view import SsoLoginView
 
 router = DefaultRouter()
@@ -31,5 +31,6 @@ router.register(r'itinerary-days', ItineraryDayViewSet, basename='itinerary-days
 urlpatterns = [
     path('', include(router.urls)),
     path('import-pdf/', PdfImportView.as_view(), name='import-pdf'),
+    path('import-pdf/<str:task_id>/', PdfImportStatusView.as_view(), name='import-pdf-status'),
     path('sso-login/', SsoLoginView.as_view(), name='sso-login'),
 ]

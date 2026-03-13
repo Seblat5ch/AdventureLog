@@ -76,15 +76,22 @@ async function handleRequest(
 		: `csrftoken=${csrfToken}`;
 
 	try {
+		// Use arrayBuffer for body to properly handle binary data
+		const body =
+			request.method !== 'GET' && request.method !== 'HEAD'
+				? await request.arrayBuffer()
+				: undefined;
+
+		const requestHeaders: Record<string, string> = {
+			...Object.fromEntries(headers),
+			'X-CSRFToken': csrfToken,
+			Cookie: cookieHeader,
+		};
+
 		const response = await fetch(targetUrl, {
 			method: request.method,
-			headers: {
-				...Object.fromEntries(headers),
-				'X-CSRFToken': csrfToken,
-				Cookie: cookieHeader
-			},
-			body:
-				request.method !== 'GET' && request.method !== 'HEAD' ? await request.text() : undefined,
+			headers: requestHeaders,
+			body,
 			credentials: 'include' // This line ensures cookies are sent with the request
 		});
 
@@ -95,7 +102,7 @@ async function handleRequest(
 			});
 		}
 
-		const responseData = await response.text();
+		const responseData = await response.arrayBuffer();
 		// Create a new Headers object without the 'set-cookie' header
 		const cleanHeaders = new Headers(response.headers);
 		cleanHeaders.delete('set-cookie');
