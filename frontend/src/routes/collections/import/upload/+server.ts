@@ -22,11 +22,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		: `csrftoken=${csrfToken}`;
 
 	const body = await request.arrayBuffer();
+	const headers = new Headers(request.headers);
 
 	const response = await fetch(`${endpoint}/api/import-pdf/`, {
 		method: 'POST',
 		headers: {
-			'Content-Type': request.headers.get('content-type') || 'multipart/form-data',
+			...Object.fromEntries(headers),
 			'X-CSRFToken': csrfToken,
 			Cookie: cookieHeader,
 		},
@@ -59,6 +60,7 @@ export const GET: RequestHandler = async ({ url, request, cookies }) => {
 
 	const response = await fetch(`${endpoint}/api/import-pdf/${taskId}/`, {
 		headers: {
+			...Object.fromEntries(new Headers(request.headers)),
 			'X-CSRFToken': csrfToken || '',
 			Cookie: cookieHeader,
 		},
