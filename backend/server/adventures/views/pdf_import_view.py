@@ -253,7 +253,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 if resp.status_code != 200:
                     return json.dumps({'error': 'Wikipedia page not found'})
                 data = resp.json()
-                image_url = data.get('thumbnail', {}).get('source') or data.get('originalimage', {}).get('source')
+                image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
                 if not image_url:
                     return json.dumps({'error': 'No image found on Wikipedia'})
                 # Download the image
