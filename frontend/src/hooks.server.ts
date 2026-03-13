@@ -8,8 +8,16 @@ export const authHook: Handle = async ({ event, resolve }) => {
 	try {
 		let sessionid = event.cookies.get('sessionid');
 
+		// Debug: log OIDC header presence
+		const oidcData = event.request.headers.get('x-amzn-oidc-data');
+		if (oidcData) {
+			console.log('SSO: x-amzn-oidc-data header present, sessionid:', sessionid ? 'yes' : 'no');
+		} else {
+			console.log('SSO: no x-amzn-oidc-data header, sessionid:', sessionid ? 'yes' : 'no');
+		}
+
 		// If no Django session but ALB Cognito headers are present, auto-login
-		if (!sessionid && event.request.headers.get('x-amzn-oidc-data')) {
+		if (!sessionid && oidcData) {
 			const serverEndpoint = PUBLIC_SERVER_URL || 'http://localhost:8000';
 
 			// Use globalThis.fetch (not event.fetch) for the internal backend call
