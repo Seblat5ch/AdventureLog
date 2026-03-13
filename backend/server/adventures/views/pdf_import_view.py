@@ -174,6 +174,9 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 flight_number: Flight number (optional)
                 description: Details (optional)
             """
+            valid_types = {'car', 'plane', 'train', 'bus', 'boat', 'bike', 'walking', 'other'}
+            if transport_type not in valid_types:
+                transport_type = 'other'
             t = Transportation.objects.create(
                 user=ctx['user'], collection=ctx['collection'], name=name,
                 type=transport_type, from_location=from_location,
@@ -190,7 +193,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             """Add accommodation.
             Args:
                 name: Hotel/lodge name
-                lodging_type: hotel, hostel, resort, bnb, campground, cabin, apartment, house, villa, motel, other
+                lodging_type: MUST be one of: hotel, hostel, resort, bnb, campground, cabin, apartment, house, villa, motel, other
                 check_in: YYYY-MM-DD
                 check_out: YYYY-MM-DD
                 location_name: City/area (optional)
@@ -198,6 +201,9 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 latitude: Lat (optional)
                 longitude: Lng (optional)
             """
+            valid_types = {'hotel', 'hostel', 'resort', 'bnb', 'campground', 'cabin', 'apartment', 'house', 'villa', 'motel', 'other'}
+            if lodging_type not in valid_types:
+                lodging_type = 'other'
             l = Lodging.objects.create(
                 user=ctx['user'], collection=ctx['collection'], name=name,
                 type=lodging_type, check_in=check_in, check_out=check_out,
