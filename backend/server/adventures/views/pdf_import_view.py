@@ -238,12 +238,24 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             valid_types = {'hotel', 'hostel', 'resort', 'bnb', 'campground', 'cabin', 'apartment', 'house', 'villa', 'motel', 'other'}
             if lodging_type not in valid_types:
                 lodging_type = 'other'
+            # Geocode the lodge by name if no coordinates provided
+            lat, lng = latitude, longitude
+            if (not lat or not lng) and name:
+                from adventures.geocoding import search as geo_search
+                try:
+                    query = f"{name} {location_name}" if location_name else name
+                    results = geo_search(query)
+                    if isinstance(results, list) and results:
+                        lat = float(results[0].get('lat', 0))
+                        lng = float(results[0].get('lon', 0))
+                except Exception:
+                    pass
             l = Lodging.objects.create(
                 user=ctx['user'], collection=ctx['collection'], name=name,
                 type=lodging_type, check_in=check_in, check_out=check_out,
                 location=location_name or "", description=description or "",
-                latitude=latitude if latitude else None,
-                longitude=longitude if longitude else None,
+                latitude=lat if lat else None,
+                longitude=lng if lng else None,
             )
             _progress(f"🏨 Added lodging: {name}")
             return json.dumps({'id': str(l.id), 'name': l.name})

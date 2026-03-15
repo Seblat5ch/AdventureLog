@@ -15,7 +15,6 @@ inclusion: manual
 ## Next Up: Technical Improvements
 
 ### PDF Import Agent
-- **Lodging geocoding** — search Google Maps/Nominatim by lodge name for exact coordinates
 - **Images for lodgings/transport** — fetch images for hotels, boats, safari vehicles (not just locations)
 - **Context-aware images** — if PDF says "7-seater Land Cruiser", search for that
 - **Trip enhancement mode** — detect matching existing collections by date/destination and enrich instead of creating duplicates (e.g. upload itinerary first, then travel story to add personal anecdotes)
