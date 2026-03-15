@@ -17,3 +17,4 @@ inclusion: manual
 8. **metadata.json import** — Support importing the same JSON format that AdventureLog's export produces.
 9. **Progress streaming** — WebSocket or SSE to show real-time tool execution progress instead of polling.
 10. **Images for lodgings/transport** — Fetch images for hotels and transport types (boats, safari vehicles) not just locations.
+11. **Trip enhancement mode** — When uploading a second PDF (e.g. a travel story after the itinerary), the agent detects matching existing collections by date range/destination/traveler names and enhances the trip instead of creating a duplicate. Adds richer descriptions, personal anecdotes, restaurant recommendations, and details from the narrative.
