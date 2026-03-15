@@ -168,20 +168,28 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             return json.dumps({'id': str(collection.id), 'name': collection.name})
 
         @tool
-        def add_location(name: str, description: str, latitude: float, longitude: float) -> str:
+        def add_location(name: str, description: str, latitude: float, longitude: float,
+                         category: str = "general", category_icon: str = "🌍") -> str:
             """Add a destination to the trip.
             Args:
                 name: Place name
-                description: What happens here
+                description: What happens here (2-3 sentences)
                 latitude: Lat coordinate
                 longitude: Lng coordinate
+                category: Category name like: national_park, city, lake, lodge, restaurant, airport, wetland, viewpoint, wildlife, cultural, general
+                category_icon: Emoji icon for the category (e.g. 🏞️ for parks, 🏙️ for cities, 🌊 for lakes, 🍽️ for restaurants, ✈️ for airports, 🦁 for wildlife, 🏛️ for cultural)
             """
+            # Get or create the category for this user
+            cat, _ = Category.objects.get_or_create(
+                user=ctx['user'], name=category.lower().strip(),
+                defaults={'display_name': category.replace('_', ' ').title(), 'icon': category_icon}
+            )
             loc = Location(user=ctx['user'], name=name, description=description,
-                           latitude=latitude, longitude=longitude)
+                           latitude=latitude, longitude=longitude, category=cat)
             loc.save(_skip_geocode=False)
             if ctx['collection']:
                 loc.collections.add(ctx['collection'])
-            _progress(f"📍 Added location: {name}")
+            _progress(f"📍 Added location: {name} [{category}]")
             return json.dumps({'id': str(loc.id), 'name': loc.name})
 
         @tool
