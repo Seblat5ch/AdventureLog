@@ -145,6 +145,9 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
     try:
         _tasks[task_id]['status'] = 'running'
 
+        def _progress(msg):
+            _tasks[task_id]['progress'].append(msg)
+
         @tool
         def create_trip(name: str, description: str, start_date: str, end_date: str) -> str:
             """Create a new trip collection.
@@ -161,6 +164,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             )
             ctx['collection'] = collection
             _tasks[task_id]['collection_id'] = str(collection.id)
+            _progress(f"✈️ Created trip: {name}")
             return json.dumps({'id': str(collection.id), 'name': collection.name})
 
         @tool
@@ -177,6 +181,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             loc.save(_skip_geocode=False)
             if ctx['collection']:
                 loc.collections.add(ctx['collection'])
+            _progress(f"📍 Added location: {name}")
             return json.dumps({'id': str(loc.id), 'name': loc.name})
 
         @tool
@@ -204,6 +209,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 end_date=end_date or None, flight_number=flight_number or "",
                 description=description or "",
             )
+            _progress(f"🚗 Added transport: {name}")
             return json.dumps({'id': str(t.id), 'name': t.name})
 
         @tool
@@ -231,6 +237,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 latitude=latitude if latitude else None,
                 longitude=longitude if longitude else None,
             )
+            _progress(f"🏨 Added lodging: {name}")
             return json.dumps({'id': str(l.id), 'name': l.name})
 
         @tool
@@ -245,6 +252,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 user=ctx['user'], collection=ctx['collection'],
                 name=name, content=content, date=date or None,
             )
+            _progress(f"📝 Added note: {name}")
             return json.dumps({'id': str(n.id), 'name': n.name})
 
         @tool
@@ -261,6 +269,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 ChecklistItem.objects.create(
                     user=ctx['user'], checklist=cl, name=item_name, is_checked=False,
                 )
+            _progress(f"✅ Added checklist: {name} ({len(items)} items)")
             return json.dumps({'id': str(cl.id), 'name': cl.name, 'items': len(items)})
 
         @tool
@@ -415,7 +424,7 @@ class PdfImportView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         task_id = str(uuid.uuid4())
-        _tasks[task_id] = {'status': 'pending', 'collection_id': None, 'error': None, 'user_id': user.id}
+        _tasks[task_id] = {'status': 'pending', 'collection_id': None, 'error': None, 'user_id': user.id, 'progress': []}
 
         thread = threading.Thread(
             target=_run_agent,
@@ -440,7 +449,7 @@ class PdfImportStatusView(APIView):
         if task.get('user_id') != request.user.id:
             return Response({'error': 'Not your task.'}, status=status.HTTP_403_FORBIDDEN)
 
-        result = {'status': task['status']}
+        result = {'status': task['status'], 'progress': task.get('progress', [])}
 
         if task['status'] == 'done' and task['collection_id']:
             result['collection_id'] = task['collection_id']

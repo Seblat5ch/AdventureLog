@@ -60,9 +60,9 @@
 					return;
 				}
 
-				// Still running — update progress
-				if (data.status === 'running') {
-					uploadProgress = 'AI is parsing your itinerary...';
+				// Still running — update progress with latest tool output
+				if (data.status === 'running' && data.progress && data.progress.length > 0) {
+					uploadProgress = data.progress[data.progress.length - 1];
 				}
 			} catch {
 				// Network blip, keep polling
