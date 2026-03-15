@@ -111,6 +111,26 @@ def _auto_generate_itinerary(collection):
                 date=d, order=_next_order(d)
             )
 
+    # Add undated notes and checklists as global/trip-wide context items
+    global_order = 1
+    for n in Note.objects.filter(collection=collection, date__isnull=True):
+        ct = ContentType.objects.get_for_model(Note)
+        if not CollectionItineraryItem.objects.filter(collection=collection, content_type=ct, object_id=n.id).exists():
+            CollectionItineraryItem.objects.create(
+                collection=collection, content_type=ct, object_id=n.id,
+                is_global=True, order=global_order
+            )
+            global_order += 1
+
+    for cl in Checklist.objects.filter(collection=collection):
+        ct = ContentType.objects.get_for_model(Checklist)
+        if not CollectionItineraryItem.objects.filter(collection=collection, content_type=ct, object_id=cl.id).exists():
+            CollectionItineraryItem.objects.create(
+                collection=collection, content_type=ct, object_id=cl.id,
+                is_global=True, order=global_order
+            )
+            global_order += 1
+
 
 def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
     """Run the Strands agent in a background thread."""
@@ -319,15 +339,30 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             tools=[create_trip, add_location, add_transportation, add_lodging, add_note, add_checklist, add_image_to_location, schedule_location_for_day],
             system_prompt="""You are a travel itinerary parser for AdventureLog.
 Given travel PDF text, you must:
-1. Call create_trip with the trip name, description, and date range.
-2. For each destination, call add_location with approximate lat/lng for known places.
-3. For each location, call add_image_to_location to fetch a Wikipedia image for it.
-4. For each location, call schedule_location_for_day to assign it to the correct day in the itinerary.
-5. For each flight/bus/transfer, call add_transportation.
-6. For each hotel/lodge/camp, call add_lodging with check-in/check-out dates.
-7. If there are travel tips or general advice, call add_note.
-8. If there are packing lists, call add_checklist.
-Be thorough. Use YYYY-MM-DD dates. Use real approximate coordinates for known places.
+1. Call create_trip with the trip name, a DETAILED description (3-5 sentences about the trip), and date range.
+2. For each destination/activity, call add_location with:
+   - A descriptive name (e.g. "Gorilla Tracking at Bwindi" not just "Bwindi")
+   - A rich description (2-3 sentences about what happens there)
+   - Approximate lat/lng for known places
+3. For each location, call add_image_to_location to fetch a Wikipedia image.
+4. For each location, call schedule_location_for_day to assign it to the correct day.
+5. For each flight/bus/transfer, call add_transportation with the correct type.
+6. For each hotel/lodge/camp, call add_lodging with:
+   - The EXACT hotel/lodge name as it appears in the PDF (e.g. "Chameleon Hill Forest Lodge")
+   - The location_name should be the city/area (e.g. "Lake Mutanda, Uganda")
+   - Approximate lat/lng if you know the place
+   - A description of the accommodation
+7. After adding each lodging, call add_image_to_location with the lodging's location name to find an image.
+8. For travel tips, requirements, or general advice, call add_note with date="" (no date = trip-wide context).
+9. For packing lists, call add_checklist.
+
+IMPORTANT RULES:
+- Use YYYY-MM-DD dates everywhere.
+- Use real approximate coordinates for known places.
+- Lodging types MUST be: hotel, hostel, resort, bnb, campground, cabin, apartment, house, villa, motel, other
+- Transport types MUST be: car, plane, train, bus, boat, bike, walking, other
+- Write descriptions in the SAME LANGUAGE as the PDF. If the PDF is in German, write German descriptions.
+- Be thorough — extract every detail from the PDF.
 IMPORTANT: After adding each location, always call add_image_to_location and schedule_location_for_day for it.""",
         )
 
