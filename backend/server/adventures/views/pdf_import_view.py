@@ -401,14 +401,17 @@ IMPORTANT: After adding each location, always call add_image_to_location and sch
             _auto_generate_itinerary(ctx['collection'])
             note = Note.objects.create(
                 user=user, collection=ctx['collection'],
-                name=f"Original: {pdf_filename}",
-                content=f"Uploaded travel document: {pdf_filename}",
+                name=f"📄 Original: {pdf_filename}",
+                content=f"Uploaded travel document: **{pdf_filename}**\n\nThis PDF was used by the AI agent to generate this trip itinerary.",
             )
             content_type = ContentType.objects.get_for_model(Note)
-            ContentAttachment.objects.create(
+            attachment = ContentAttachment.objects.create(
                 user=user, file=ContentFile(pdf_bytes, name=pdf_filename),
                 name=pdf_filename, content_type=content_type, object_id=note.id,
             )
+            # Update note content with download link
+            note.content += f"\n\n[📎 Download {pdf_filename}](/media/{attachment.file.name})"
+            note.save()
 
         _tasks[task_id]['status'] = 'done'
         logger.info(f"PDF import task {task_id} completed: collection {_tasks[task_id].get('collection_id')}")
