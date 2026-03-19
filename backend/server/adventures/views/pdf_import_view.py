@@ -184,8 +184,18 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 user=ctx['user'], name=category.lower().strip(),
                 defaults={'display_name': category.replace('_', ' ').title(), 'icon': category_icon}
             )
+            # Geocode the location by name for accurate coordinates
+            lat, lng = latitude, longitude
+            from adventures.geocoding import search as geo_search
+            try:
+                results = geo_search(name)
+                if isinstance(results, list) and results:
+                    lat = float(results[0].get('lat', latitude))
+                    lng = float(results[0].get('lon', longitude))
+            except Exception:
+                pass  # Fall back to AI-provided coordinates
             loc = Location(user=ctx['user'], name=name, description=description,
-                           latitude=latitude, longitude=longitude, category=cat)
+                           latitude=lat, longitude=lng, category=cat)
             loc.save(_skip_geocode=False)
             if ctx['collection']:
                 loc.collections.add(ctx['collection'])
