@@ -368,9 +368,9 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 return json.dumps({'error': str(e)})
 
         model = BedrockModel(
-            model_id="eu.anthropic.claude-sonnet-4-20250514-v1:0",
+            model_id="eu.anthropic.claude-opus-4-6-v1:0",
             region_name=os.getenv('AWS_REGION', 'eu-west-1'),
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         agent = Agent(
