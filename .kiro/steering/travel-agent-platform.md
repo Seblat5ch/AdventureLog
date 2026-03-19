@@ -31,6 +31,8 @@ inclusion: manual
 - Some client-side `fetch('/api/...')` calls may still 403 in edge cases
 - Consider SvelteKit `handleFetch` hook to intercept all client-side fetches
 - Photo EXIF matching: bulk upload photos → extract GPS + timestamp → auto-match to nearest location
+- **Route mapping on collection map** — draw polylines connecting locations in itinerary day order, showing the travel route with distances. Like Google Maps multi-stop directions but on the MapLibre map.
+- **Fix satellite map tiles** — USGS imagery only covers US, 404s for Africa/international. Switch to a global satellite tile provider (Mapbox, Esri World Imagery, or OpenStreetMap).
 
 ## Future: B2B Travel Agency Platform
 
