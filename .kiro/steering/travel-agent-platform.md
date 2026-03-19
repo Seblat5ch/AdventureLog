@@ -25,6 +25,7 @@ inclusion: manual
 - Store task status in DB instead of in-memory (survives container restarts)
 - Set `minimumHealthyPercent: 100` on ECS to prevent killing containers mid-import
 - Remove debug SSO logging from `hooks.server.ts`
+- **Move media storage from EFS to S3** — use `django-storages` with S3 backend. Cheaper ($0.023/GB vs $0.30/GB), scalable, and enables CloudFront CDN for media. Needs: S3 bucket in CDK, IAM permissions on backend task role, `django-storages` package, update `STORAGES` setting, remove EFS mount.
 
 ### Frontend
 - Some client-side `fetch('/api/...')` calls may still 403 in edge cases
