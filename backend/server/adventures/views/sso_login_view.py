@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 @method_decorator(csrf_exempt, name='dispatch')
 class SsoLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = []  # Exempt from throttling — called on every page load behind ALB
 
     def get(self, request):
         if request.user and request.user.is_authenticated:

@@ -308,7 +308,7 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'user': '1000/day',
+        'user': '10000/day',
         'image_proxy': '60/minute',
     },
 }
