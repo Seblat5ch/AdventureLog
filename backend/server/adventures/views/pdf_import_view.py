@@ -304,25 +304,59 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
 
         @tool
         def add_image_to_location(location_id: str, search_query: str) -> str:
-            """Fetch a Wikipedia image for a location and attach it.
+            """Fetch an image for a location from multiple sources and attach it.
             Args:
                 location_id: The location ID returned by add_location
-                search_query: Search term for Wikipedia (e.g. 'Bwindi Impenetrable National Park')
+                search_query: Search term in ENGLISH (e.g. 'Groot Constantia Wine Estate' not 'Groot Constantia Weingut')
             """
             import requests as req
             try:
                 loc = Location.objects.get(id=location_id)
-                # Search Wikipedia for the page
+                image_url = None
+                headers = {'User-Agent': 'AdventureLog/1.0'}
+
+                # Try 1: Wikipedia (English)
                 search_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{search_query.replace(' ', '_')}"
-                resp = req.get(search_url, timeout=10, headers={'User-Agent': 'AdventureLog/1.0'})
-                if resp.status_code != 200:
-                    return json.dumps({'error': 'Wikipedia page not found'})
-                data = resp.json()
-                image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
+                resp = req.get(search_url, timeout=10, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
+
+                # Try 2: Wikipedia search API (fuzzy match)
                 if not image_url:
-                    return json.dumps({'error': 'No image found on Wikipedia'})
+                    search_api = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={search_query}&format=json&srlimit=1"
+                    resp = req.get(search_api, timeout=10, headers=headers)
+                    if resp.status_code == 200:
+                        results = resp.json().get('query', {}).get('search', [])
+                        if results:
+                            title = results[0]['title'].replace(' ', '_')
+                            summary_resp = req.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}", timeout=10, headers=headers)
+                            if summary_resp.status_code == 200:
+                                data = summary_resp.json()
+                                image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
+
+                # Try 3: Wikimedia Commons search
+                if not image_url:
+                    commons_url = f"https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch={search_query}&srnamespace=6&format=json&srlimit=1"
+                    resp = req.get(commons_url, timeout=10, headers=headers)
+                    if resp.status_code == 200:
+                        results = resp.json().get('query', {}).get('search', [])
+                        if results:
+                            file_title = results[0]['title']
+                            file_url = f"https://commons.wikimedia.org/w/api.php?action=query&titles={file_title}&prop=imageinfo&iiprop=url&format=json"
+                            file_resp = req.get(file_url, timeout=10, headers=headers)
+                            if file_resp.status_code == 200:
+                                pages = file_resp.json().get('query', {}).get('pages', {})
+                                for page in pages.values():
+                                    ii = page.get('imageinfo', [{}])
+                                    if ii:
+                                        image_url = ii[0].get('url')
+
+                if not image_url:
+                    return json.dumps({'error': f'No image found for: {search_query}'})
+
                 # Download the image
-                img_resp = req.get(image_url, timeout=10, headers={'User-Agent': 'AdventureLog/1.0'})
+                img_resp = req.get(image_url, timeout=15, headers=headers)
                 if img_resp.status_code != 200:
                     return json.dumps({'error': 'Failed to download image'})
                 # Save as ContentImage
@@ -336,6 +370,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 )
                 ext = image_url.split('.')[-1].split('?')[0][:4]
                 img.image.save(f"{loc.name[:30]}.{ext}", CF(img_resp.content), save=True)
+                _progress(f"🖼️ Added image for: {loc.name}")
                 return json.dumps({'id': str(img.id), 'location': loc.name, 'image_url': image_url})
             except Exception as e:
                 return json.dumps({'error': str(e)})
@@ -368,7 +403,7 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 return json.dumps({'error': str(e)})
 
         model = BedrockModel(
-            model_id="eu.anthropic.claude-sonnet-4-20250514-v1:0",
+            model_id="eu.anthropic.claude-opus-4-6-v1:0",
             region_name=os.getenv('AWS_REGION', 'eu-west-1'),
             max_tokens=16384,
         )
@@ -380,27 +415,35 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
 Given travel PDF text, you must:
 1. Call create_trip with the trip name, a DETAILED description (3-5 sentences about the trip), and date range.
 2. For each destination/activity, call add_location with:
-   - A descriptive name (e.g. "Gorilla Tracking at Bwindi" not just "Bwindi")
-   - A rich description (2-3 sentences about what happens there)
+   - A descriptive name in the PDF's language (e.g. "Gorilla-Tracking im Bwindi" for German PDFs)
+   - A rich description (2-3 sentences) in the PDF's language
    - Approximate lat/lng for known places
-3. For each location, call add_image_to_location to fetch a Wikipedia image.
+3. For each location, call add_image_to_location with the ENGLISH common name as search_query.
+   - CRITICAL: Always use the well-known ENGLISH name for image search, NOT the PDF language.
+   - Example: search "Groot Constantia Wine Estate" not "Groot Constantia Weingut"
+   - Example: search "Cape of Good Hope" not "Cape of Good Hope Nature Reserve" (use shorter, common names)
+   - Example: search "Table Mountain" not "Tafelberg"
+   - For hotels/lodges, search the exact property name (e.g. "Chameleon Hill Forest Lodge")
 4. For each location, call schedule_location_for_day to assign it to the correct day.
 5. For each flight/bus/transfer, call add_transportation with the correct type.
+   - Include flight numbers if mentioned in the PDF.
 6. For each hotel/lodge/camp, call add_lodging with:
-   - The EXACT hotel/lodge name as it appears in the PDF (e.g. "Chameleon Hill Forest Lodge")
+   - The EXACT hotel/lodge name as it appears in the PDF
    - The location_name should be the city/area (e.g. "Lake Mutanda, Uganda")
    - Approximate lat/lng if you know the place
-   - A description of the accommodation
-7. After adding each lodging, call add_image_to_location with the lodging's location name to find an image.
+   - A description in the PDF's language
+7. After adding each lodging, call add_image_to_location with the ENGLISH property name.
 8. For travel tips, requirements, or general advice, call add_note with date="" (no date = trip-wide context).
 9. For packing lists, call add_checklist.
 
 IMPORTANT RULES:
 - Use YYYY-MM-DD dates everywhere.
 - Use real approximate coordinates for known places.
+- For GEOCODING: the system geocodes by the location name you provide. Use well-known names that Google Maps would recognize. Prefer English names for international places.
 - Lodging types MUST be: hotel, hostel, resort, bnb, campground, cabin, apartment, house, villa, motel, other
 - Transport types MUST be: car, plane, train, bus, boat, bike, walking, other
-- Write descriptions in the SAME LANGUAGE as the PDF. If the PDF is in German, write German descriptions.
+- Write descriptions and location names in the SAME LANGUAGE as the PDF.
+- For image search (add_image_to_location search_query): ALWAYS use ENGLISH common names. Never translate place names literally — use the internationally recognized name.
 - Be thorough — extract every detail from the PDF.
 IMPORTANT: After adding each location, always call add_image_to_location and schedule_location_for_day for it.""",
         )
