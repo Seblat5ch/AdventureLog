@@ -21,6 +21,73 @@
 	import { addToast } from '$lib/toasts';
 	import DeleteWarning from '$lib/components/DeleteWarning.svelte';
 
+	// PDF AI import (staff only)
+	import FileDocument from '~icons/mdi/file-document';
+	let showPdfImportModal = false;
+	let pdfFile: File | null = null;
+	let pdfUploading = false;
+	let pdfProgress = '';
+	let pdfInputEl: HTMLInputElement | null = null;
+
+	function handlePdfSelect(e: Event) {
+		const input = e.target as HTMLInputElement;
+		if (input.files && input.files.length > 0) {
+			pdfFile = input.files[0];
+		}
+	}
+
+	async function pollPdfStatus(taskId: string) {
+		const maxAttempts = 120;
+		for (let i = 0; i < maxAttempts; i++) {
+			await new Promise((r) => setTimeout(r, 3000));
+			try {
+				const res = await fetch(`/collections/import/upload?task_id=${taskId}`);
+				if (!res.ok) continue;
+				const d = await res.json();
+				if (d.status === 'done' && d.collection) {
+					addToast('success', `Trip "${d.collection.name}" created!`);
+					showPdfImportModal = false;
+					window.location.href = `/collections/${d.collection.id}`;
+					return;
+				} else if (d.status === 'error') {
+					addToast('error', d.error || 'AI agent failed.');
+					pdfUploading = false;
+					return;
+				}
+				if (d.status === 'running' && d.progress?.length > 0) {
+					pdfProgress = d.progress[d.progress.length - 1];
+				}
+			} catch { /* keep polling */ }
+		}
+		addToast('error', 'Import timed out.');
+		pdfUploading = false;
+	}
+
+	async function uploadPdf() {
+		if (!pdfFile) return;
+		pdfUploading = true;
+		pdfProgress = 'Uploading PDF...';
+		try {
+			const formData = new FormData();
+			formData.append('pdf', pdfFile);
+			const res = await fetch('/collections/import/upload', { method: 'POST', body: formData });
+			if (res.ok || res.status === 202) {
+				const d = await res.json();
+				if (d.task_id) {
+					pdfProgress = 'AI is generating your itinerary...';
+					await pollPdfStatus(d.task_id);
+				}
+			} else {
+				const err = await res.json();
+				addToast('error', err.error || 'Failed to import PDF.');
+				pdfUploading = false;
+			}
+		} catch {
+			addToast('error', 'Network error.');
+			pdfUploading = false;
+		}
+	}
+
 	export let data: any;
 	console.log('Collections page data:', data);
 
@@ -818,6 +885,12 @@
 						<Archive class="w-5 h-5" />
 						{$t('adventures.import_from_file')}
 					</button>
+					{#if data.user?.is_staff}
+						<button class="btn btn-secondary gap-2 w-full mt-2" on:click={() => { showPdfImportModal = true; pdfFile = null; }}>
+							<FileDocument class="w-5 h-5" />
+							Import PDF (AI)
+						</button>
+					{/if}
 					<form
 						bind:this={importFormEl}
 						method="POST"
@@ -852,3 +925,47 @@
 		</div>
 	{/if}
 </div>
+
+<!-- PDF AI Import Modal (staff only) -->
+{#if showPdfImportModal}
+	<!-- svelte-ignore a11y-click-events-have-key-events -->
+	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<dialog class="modal modal-open">
+		<div class="modal-box max-w-lg">
+			<h3 class="font-bold text-lg mb-4">Import Travel PDF (AI)</h3>
+			{#if pdfUploading}
+				<div class="flex flex-col items-center gap-4 py-8">
+					<span class="loading loading-spinner loading-lg text-primary"></span>
+					<p class="text-lg font-medium">{pdfProgress}</p>
+					<p class="text-sm text-base-content/50">This may take a few minutes...</p>
+				</div>
+			{:else if pdfFile}
+				<div class="flex flex-col items-center gap-4 py-4">
+					<FileDocument class="w-12 h-12 text-success" />
+					<p class="font-medium">{pdfFile.name}</p>
+					<p class="text-sm text-base-content/50">{(pdfFile.size / 1024).toFixed(1)} KB</p>
+					<button class="btn btn-primary btn-lg" on:click={uploadPdf}>Generate Itinerary</button>
+					<button class="btn btn-ghost btn-sm" on:click={() => (pdfFile = null)}>Choose different file</button>
+				</div>
+			{:else}
+				<div
+					class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:border-primary/50"
+					on:click={() => pdfInputEl?.click()}
+					role="button"
+					tabindex="0"
+					on:keydown={(e) => { if (e.key === 'Enter') pdfInputEl?.click(); }}
+				>
+					<p class="text-lg font-medium">Drop a travel PDF here</p>
+					<p class="text-sm text-base-content/50 mt-1">or click to browse</p>
+				</div>
+				<input bind:this={pdfInputEl} type="file" accept=".pdf" class="hidden" on:change={handlePdfSelect} />
+			{/if}
+			<div class="modal-action">
+				{#if !pdfUploading}
+					<button class="btn" on:click={() => (showPdfImportModal = false)}>Cancel</button>
+				{/if}
+			</div>
+		</div>
+		<div class="modal-backdrop" on:click={() => { if (!pdfUploading) showPdfImportModal = false; }}></div>
+	</dialog>
+{/if}
