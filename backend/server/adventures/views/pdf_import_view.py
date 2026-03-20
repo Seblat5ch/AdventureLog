@@ -59,6 +59,26 @@ def _extract_pdf_text(pdf_bytes: bytes) -> str:
         return ""
 
 
+def _extract_pdf_images(pdf_bytes: bytes, min_size: int = 10000) -> list:
+    """Extract images from PDF bytes using PyMuPDF. Returns list of (image_bytes, ext)."""
+    images = []
+    try:
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            for img_index, img in enumerate(page.get_images(full=True)):
+                xref = img[0]
+                base_image = doc.extract_image(xref)
+                if base_image and len(base_image["image"]) >= min_size:
+                    ext = base_image.get("ext", "png")
+                    images.append((base_image["image"], ext, page_num))
+        doc.close()
+    except Exception:
+        pass
+    return images
+
+
 def _auto_generate_itinerary(collection):
     """Create itinerary days and assign dated items that the agent didn't already schedule."""
     from datetime import timedelta
@@ -140,7 +160,10 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
     from strands import Agent, tool
     from strands.models import BedrockModel
 
-    ctx = {'user': user, 'collection': None}
+    # Extract images from the PDF for the agent to use
+    pdf_images = _extract_pdf_images(pdf_bytes)
+
+    ctx = {'user': user, 'collection': None, 'pdf_images': pdf_images}
 
     try:
         _tasks[task_id]['status'] = 'running'
@@ -379,6 +402,39 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 return json.dumps({'error': str(e)})
 
         @tool
+        def attach_pdf_image(location_id: str, page_number: int) -> str:
+            """Attach an image extracted from the uploaded PDF to a location.
+            Use this when the PDF contains photos of the location (e.g. hotel photos, landscape shots).
+            Args:
+                location_id: The location ID returned by add_location
+                page_number: The PDF page number (0-based) where the image appears
+            """
+            try:
+                loc = Location.objects.get(id=location_id)
+                # Find images from the specified page
+                page_imgs = [(img_bytes, ext) for img_bytes, ext, pg in ctx['pdf_images'] if pg == page_number]
+                if not page_imgs:
+                    # Try nearby pages (±1)
+                    page_imgs = [(img_bytes, ext) for img_bytes, ext, pg in ctx['pdf_images'] if abs(pg - page_number) <= 1]
+                if not page_imgs:
+                    return json.dumps({'error': f'No images found on page {page_number}'})
+                # Use the largest image from that page
+                img_bytes, ext = max(page_imgs, key=lambda x: len(x[0]))
+                from django.core.files.base import ContentFile as CF
+                ct = ContentType.objects.get_for_model(Location)
+                img = ContentImage(
+                    user=ctx['user'],
+                    content_type=ct,
+                    object_id=loc.id,
+                    is_primary=not ContentImage.objects.filter(content_type=ct, object_id=loc.id).exists(),
+                )
+                img.image.save(f"{loc.name[:30]}_pdf.{ext}", CF(img_bytes), save=True)
+                _progress(f"📷 Attached PDF image to: {loc.name} (page {page_number})")
+                return json.dumps({'id': str(img.id), 'location': loc.name, 'source': 'pdf'})
+            except Exception as e:
+                return json.dumps({'error': str(e)})
+
+        @tool
         def schedule_location_for_day(location_id: str, visit_date: str, order: int = 1) -> str:
             """Assign a location to a specific day in the itinerary.
             Args:
@@ -413,21 +469,21 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
 
         agent = Agent(
             model=model,
-            tools=[create_trip, add_location, add_transportation, add_lodging, add_note, add_checklist, add_image_to_location, schedule_location_for_day],
-            system_prompt="""You are a travel itinerary parser for AdventureLog.
+            tools=[create_trip, add_location, add_transportation, add_lodging, add_note, add_checklist, add_image_to_location, attach_pdf_image, schedule_location_for_day],
+            system_prompt="""You are a travel itinerary parser for Travel Architecture by FaberCollins.
 Given travel PDF text, you must:
 1. Call create_trip with the trip name, a DETAILED description (3-5 sentences about the trip), and date range.
 2. For each destination/activity, call add_location with:
    - A descriptive name in the PDF's language (e.g. "Gorilla-Tracking im Bwindi" for German PDFs)
    - A rich description (2-3 sentences) in the PDF's language
    - Approximate lat/lng for known places
-   - ALWAYS provide english_name with the well-known ENGLISH name for geocoding (e.g. "Cape of Good Hope" not "Kap der Guten Hoffnung", "Groot Constantia Wine Estate" not "Groot Constantia Weingut")
-3. For each location, call add_image_to_location with the ENGLISH common name as search_query.
-   - CRITICAL: Always use the well-known ENGLISH name for image search, NOT the PDF language.
-   - Example: search "Groot Constantia Wine Estate" not "Groot Constantia Weingut"
-   - Example: search "Cape of Good Hope" not "Cape of Good Hope Nature Reserve" (use shorter, common names)
-   - Example: search "Table Mountain" not "Tafelberg"
-   - For hotels/lodges, search the exact property name (e.g. "Chameleon Hill Forest Lodge")
+   - ALWAYS provide english_name with the SHORT, well-known ENGLISH name for geocoding.
+     Use the SIMPLEST name that Google Maps would find. Drop suffixes like "Nature Reserve", "National Park" if the base name is already unique.
+     Examples: "Cape of Good Hope" NOT "Cape of Good Hope Nature Reserve", "Groot Constantia" NOT "Groot Constantia Wine Estate Weingut"
+3. For each location, FIRST try attach_pdf_image if the PDF has a photo on the same page as that location.
+   Then call add_image_to_location with the SHORT ENGLISH name as search_query as a fallback.
+   - Use the SHORTEST recognizable name: "Table Mountain" not "Table Mountain National Park"
+   - For hotels/lodges, use the exact property name (e.g. "Chameleon Hill Forest Lodge")
 4. For each location, call schedule_location_for_day to assign it to the correct day.
 5. For each flight/bus/transfer, call add_transportation with the correct type.
    - Include flight numbers if mentioned in the PDF.
@@ -436,20 +492,20 @@ Given travel PDF text, you must:
    - The location_name should be the city/area (e.g. "Lake Mutanda, Uganda")
    - Approximate lat/lng if you know the place
    - A description in the PDF's language
-7. After adding each lodging, call add_image_to_location with the ENGLISH property name.
+7. After adding each lodging, try attach_pdf_image first, then add_image_to_location with the ENGLISH property name.
 8. For travel tips, requirements, or general advice, call add_note with date="" (no date = trip-wide context).
 9. For packing lists, call add_checklist.
 
 IMPORTANT RULES:
 - Use YYYY-MM-DD dates everywhere.
 - Use real approximate coordinates for known places.
-- For GEOCODING: the system geocodes by the location name you provide. Use well-known names that Google Maps would recognize. Prefer English names for international places.
+- For english_name and search_query: use the SHORTEST recognizable English name. If "Cape of Good Hope" works, don't add "Nature Reserve". If "Groot Constantia" works, don't add "Wine Estate".
 - Lodging types MUST be: hotel, hostel, resort, bnb, campground, cabin, apartment, house, villa, motel, other
 - Transport types MUST be: car, plane, train, bus, boat, bike, walking, other
 - Write descriptions and location names in the SAME LANGUAGE as the PDF.
-- For image search (add_image_to_location search_query): ALWAYS use ENGLISH common names. Never translate place names literally — use the internationally recognized name.
+- The PDF contains {num_pdf_images} embedded images. Use attach_pdf_image to attach relevant photos from the PDF to locations.
 - Be thorough — extract every detail from the PDF.
-IMPORTANT: After adding each location, always call add_image_to_location and schedule_location_for_day for it.""",
+IMPORTANT: After adding each location, always try to attach an image (PDF first, then web search) and call schedule_location_for_day.""".format(num_pdf_images=len(pdf_images)),
         )
 
         agent(f"Parse this travel itinerary and create a complete trip:\n\n{pdf_text}")
