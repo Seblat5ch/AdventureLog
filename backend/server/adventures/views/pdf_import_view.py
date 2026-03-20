@@ -209,12 +209,24 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 user=ctx['user'], name=category.lower().strip(),
                 defaults={'display_name': category.replace('_', ' ').title(), 'icon': category_icon}
             )
-            # Geocode using the English name for better results
+            # Geocode using the English name for better results, with progressive shortening
             geocode_name = english_name or name
             lat, lng = latitude, longitude
             from adventures.geocoding import search as geo_search
             try:
                 results = geo_search(geocode_name)
+                # If no results, try progressively shorter names
+                # "Cape of Good Hope Nature Reserve" → "Cape of Good Hope" → works!
+                if (not isinstance(results, list) or not results) and geocode_name:
+                    words = geocode_name.split()
+                    # Try dropping the last word repeatedly
+                    for drop in range(1, min(len(words), 4)):
+                        shorter = ' '.join(words[:-drop])
+                        if len(shorter) < 3:
+                            break
+                        results = geo_search(shorter)
+                        if isinstance(results, list) and results:
+                            break
                 if isinstance(results, list) and results:
                     lat = float(results[0].get('lat', latitude))
                     lng = float(results[0].get('lon', longitude))
@@ -333,50 +345,97 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
             """Fetch an image for a location from multiple sources and attach it.
             Args:
                 location_id: The location ID returned by add_location
-                search_query: Search term in ENGLISH (e.g. 'Groot Constantia Wine Estate' not 'Groot Constantia Weingut')
+                search_query: Search term in ENGLISH (e.g. 'Groot Constantia' not 'Groot Constantia Weingut')
             """
             import requests as req
             try:
                 loc = Location.objects.get(id=location_id)
-                image_url = None
-                headers = {'User-Agent': 'AdventureLog/1.0'}
+                headers = {'User-Agent': 'TravelArchitecture/1.0'}
 
-                # Try 1: Wikipedia (English)
-                search_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{search_query.replace(' ', '_')}"
-                resp = req.get(search_url, timeout=10, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
-
-                # Try 2: Wikipedia search API (fuzzy match)
-                if not image_url:
-                    search_api = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={search_query}&format=json&srlimit=1"
+                def _search_wikipedia(query):
+                    """Try Wikipedia direct, then search API, then Commons."""
+                    # Direct page lookup
+                    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{query.replace(' ', '_')}"
+                    resp = req.get(url, timeout=10, headers=headers)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        img = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
+                        if img:
+                            return img
+                    # Search API (fuzzy)
+                    search_api = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&format=json&srlimit=1"
                     resp = req.get(search_api, timeout=10, headers=headers)
                     if resp.status_code == 200:
                         results = resp.json().get('query', {}).get('search', [])
                         if results:
                             title = results[0]['title'].replace(' ', '_')
-                            summary_resp = req.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}", timeout=10, headers=headers)
-                            if summary_resp.status_code == 200:
-                                data = summary_resp.json()
-                                image_url = data.get('originalimage', {}).get('source') or data.get('thumbnail', {}).get('source')
-
-                # Try 3: Wikimedia Commons search
-                if not image_url:
-                    commons_url = f"https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch={search_query}&srnamespace=6&format=json&srlimit=1"
-                    resp = req.get(commons_url, timeout=10, headers=headers)
+                            sr = req.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}", timeout=10, headers=headers)
+                            if sr.status_code == 200:
+                                img = sr.json().get('originalimage', {}).get('source') or sr.json().get('thumbnail', {}).get('source')
+                                if img:
+                                    return img
+                    # Wikimedia Commons
+                    commons = f"https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch={query}&srnamespace=6&format=json&srlimit=1"
+                    resp = req.get(commons, timeout=10, headers=headers)
                     if resp.status_code == 200:
                         results = resp.json().get('query', {}).get('search', [])
                         if results:
-                            file_title = results[0]['title']
-                            file_url = f"https://commons.wikimedia.org/w/api.php?action=query&titles={file_title}&prop=imageinfo&iiprop=url&format=json"
-                            file_resp = req.get(file_url, timeout=10, headers=headers)
-                            if file_resp.status_code == 200:
-                                pages = file_resp.json().get('query', {}).get('pages', {})
-                                for page in pages.values():
+                            ft = results[0]['title']
+                            fu = f"https://commons.wikimedia.org/w/api.php?action=query&titles={ft}&prop=imageinfo&iiprop=url&format=json"
+                            fr = req.get(fu, timeout=10, headers=headers)
+                            if fr.status_code == 200:
+                                for page in fr.json().get('query', {}).get('pages', {}).values():
                                     ii = page.get('imageinfo', [{}])
-                                    if ii:
-                                        image_url = ii[0].get('url')
+                                    if ii and ii[0].get('url'):
+                                        return ii[0]['url']
+                    return None
+
+                # Try the full query first, then progressively shorter
+                image_url = _search_wikipedia(search_query)
+                if not image_url:
+                    words = search_query.split()
+                    for drop in range(1, min(len(words), 4)):
+                        shorter = ' '.join(words[:-drop])
+                        if len(shorter) < 3:
+                            break
+                        image_url = _search_wikipedia(shorter)
+                        if image_url:
+                            break
+
+                # Try Google Places Photos as fallback (great for hotels/lodges)
+                if not image_url:
+                    from django.conf import settings as django_settings
+                    gmap_key = getattr(django_settings, 'GOOGLE_MAPS_API_KEY', None)
+                    if gmap_key:
+                        try:
+                            # Search for the place
+                            places_url = "https://places.googleapis.com/v1/places:searchText"
+                            places_resp = req.post(places_url, json={"textQuery": search_query, "maxResultCount": 1}, headers={
+                                'Content-Type': 'application/json',
+                                'X-Goog-Api-Key': gmap_key,
+                                'X-Goog-FieldMask': 'places.photos',
+                            }, timeout=10)
+                            if places_resp.status_code == 200:
+                                places = places_resp.json().get('places', [])
+                                if places and places[0].get('photos'):
+                                    photo_name = places[0]['photos'][0]['name']
+                                    # Get the actual photo URL
+                                    photo_url = f"https://places.googleapis.com/v1/{photo_name}/media?maxWidthPx=1200&key={gmap_key}"
+                                    photo_resp = req.get(photo_url, timeout=10, allow_redirects=True)
+                                    if photo_resp.status_code == 200 and len(photo_resp.content) > 5000:
+                                        image_url = photo_url  # Store for logging
+                                        # Save directly from the response content
+                                        from django.core.files.base import ContentFile as CF
+                                        ct = ContentType.objects.get_for_model(Location)
+                                        img = ContentImage(
+                                            user=ctx['user'], content_type=ct,
+                                            object_id=loc.id, is_primary=True,
+                                        )
+                                        img.image.save(f"{loc.name[:30]}_gmap.jpg", CF(photo_resp.content), save=True)
+                                        _progress(f"🖼️ Added Google Maps image for: {loc.name}")
+                                        return json.dumps({'id': str(img.id), 'location': loc.name, 'source': 'google_places'})
+                        except Exception:
+                            pass  # Fall through to "no image found"
 
                 if not image_url:
                     return json.dumps({'error': f'No image found for: {search_query}'})
@@ -385,7 +444,6 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
                 img_resp = req.get(image_url, timeout=15, headers=headers)
                 if img_resp.status_code != 200:
                     return json.dumps({'error': 'Failed to download image'})
-                # Save as ContentImage
                 from django.core.files.base import ContentFile as CF
                 ct = ContentType.objects.get_for_model(Location)
                 img = ContentImage(

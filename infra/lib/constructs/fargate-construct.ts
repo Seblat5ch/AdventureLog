@@ -118,6 +118,13 @@ export class FargateConstruct extends Construct {
       }],
     });
 
+    // Google Maps API key for geocoding and Places Photos
+    const googleMapsSecret = secretsmanager.Secret.fromSecretNameV2(
+      this, 'GoogleMapsApiKey',
+      `${props.environment}/adventurelog/google-maps-api-key`,
+    );
+    googleMapsSecret.grantRead(executionRole);
+
     backendTaskDef.addContainer('backend', {
       // Use public GHCR image for initial deploy; CodePipeline switches to ECR after first build
       image: ecs.ContainerImage.fromRegistry('ghcr.io/seanmorley15/adventurelog-backend:latest'),
@@ -141,6 +148,7 @@ export class FargateConstruct extends Construct {
         POSTGRES_PASSWORD: ecs.Secret.fromSecretsManager(props.dbSecret, 'password'),
         SECRET_KEY: ecs.Secret.fromSecretsManager(djangoSecret),
         DJANGO_ADMIN_PASSWORD: ecs.Secret.fromSecretsManager(props.dbSecret, 'password'),
+        GOOGLE_MAPS_API_KEY: ecs.Secret.fromSecretsManager(googleMapsSecret),
       },
       healthCheck: {
         // The backend container has nginx + python — use wget which is available in Debian slim
