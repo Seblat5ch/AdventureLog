@@ -203,8 +203,8 @@
 		<!-- Logo -->
 		<a class="btn btn-ghost hover:bg-transparent p-2 text-2xl font-bold tracking-tight" href="/">
 			<div class="flex items-center gap-3">
-				<img src="/favicon.png" alt="AdventureLog" class="w-10 h-10" />
-				<span class="hidden sm:inline mb-1"> AdventureLog </span>
+				<img src="/favicon.png" alt="Travel Architecture" class="w-10 h-10" />
+				<span class="hidden sm:inline mb-1"> Travel Architecture </span>
 			</div>
 		</a>
 	</div>

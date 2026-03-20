@@ -266,7 +266,7 @@
 </script>
 
 <svelte:head>
-	<title>{user.first_name || user.username}'s Profile | AdventureLog</title>
+	<title>{user.first_name || user.username}'s Profile | Travel Architecture</title>
 	<meta name="description" content="User Profile" />
 </svelte:head>
 

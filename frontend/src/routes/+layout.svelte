@@ -85,10 +85,10 @@
 <UmamiAnalyticsEnv />
 
 <svelte:head>
-	<title>AdventureLog</title>
+	<title>Travel Architecture</title>
 	<meta
 		name="description"
-		content="Embark, explore, remember with AdventureLog. AdventureLog is the ultimate travel companion."
+		content="Travel Architecture by FaberCollins — crafting your African journey."
 	/>
 </svelte:head>
 

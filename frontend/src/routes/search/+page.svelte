@@ -49,7 +49,7 @@
 
 <svelte:head>
 	<title>Search: {query}</title>
-	<meta name="description" content="AdventureLog global search results for {query}" />
+	<meta name="description" content="Travel Architecture global search results for {query}" />
 </svelte:head>
 
 <div class="min-h-screen bg-gradient-to-br from-base-200 via-base-100 to-base-200">

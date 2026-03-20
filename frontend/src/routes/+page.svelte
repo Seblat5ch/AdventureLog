@@ -232,10 +232,10 @@
 </div>
 
 <svelte:head>
-	<title>Home | AdventureLog</title>
+	<title>Home | Travel Architecture</title>
 	<meta
 		name="description"
-		content="AdventureLog is a platform to log your adventures and plan your travel."
+		content="Travel Architecture by FaberCollins — crafting your African journey."
 	/>
 </svelte:head>
 

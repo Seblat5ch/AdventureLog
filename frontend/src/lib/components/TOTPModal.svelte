@@ -56,7 +56,7 @@
 		const data = await res.json();
 		if (res.status == 404) {
 			secret = data.meta.secret;
-			totpUrl = `otpauth://totp/AdventureLog:${user?.username}?secret=${secret}&issuer=AdventureLog`;
+			totpUrl = `otpauth://totp/TravelArchitecture:${user?.username}?secret=${secret}&issuer=TravelArchitecture`;
 			generateQRCode(totpUrl);
 		} else if (res.ok) {
 			close();

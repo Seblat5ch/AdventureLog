@@ -45,7 +45,7 @@
 								<!-- Header -->
 								<div class="text-center mb-8">
 									<div class="mb-4">
-										<h1 class="text-3xl font-bold text-primary mb-1">AdventureLog</h1>
+										<h1 class="text-3xl font-bold text-primary mb-1">Travel Architecture</h1>
 										<div class="w-12 h-1 bg-primary mx-auto rounded"></div>
 									</div>
 									<h2 class="text-4xl font-bold text-base-content mb-2">{$t('auth.signup')}</h2>
@@ -247,10 +247,10 @@
 </div>
 
 <svelte:head>
-	<title>Sign Up | AdventureLog</title>
+	<title>Sign Up | Travel Architecture</title>
 	<meta
 		name="description"
-		content="Sign up for AdventureLog to explore the world and document your adventures!"
+		content="Sign up for Travel Architecture by FaberCollins."
 	/>
 </svelte:head>
 

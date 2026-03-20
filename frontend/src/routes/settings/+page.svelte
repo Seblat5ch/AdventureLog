@@ -1651,7 +1651,7 @@
 									<!-- Developer message and thanks -->
 									<div class="p-6 bg-base-200 rounded-xl">
 										<div class="text-center space-y-3">
-											<h4 class="font-medium">{$t('about.about')} AdventureLog</h4>
+											<h4 class="font-medium">{$t('about.about')} Travel Architecture</h4>
 											<p>
 												{$t('about.license')}
 											</p>
@@ -1689,7 +1689,7 @@
 </div>
 
 <svelte:head>
-	<title>User Settings | AdventureLog</title>
+	<title>User Settings | Travel Architecture</title>
 	<meta
 		name="description"
 		content="Comprehensive user settings dashboard. Manage your profile, security, emails, integrations, and more in one organized interface."

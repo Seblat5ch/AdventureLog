@@ -27,5 +27,5 @@
 
 <svelte:head>
 	<title>Email Verification</title>
-	<meta name="description" content="View your email verification status for AdventureLog." />
+	<meta name="description" content="View your email verification status for Travel Architecture." />
 </svelte:head>

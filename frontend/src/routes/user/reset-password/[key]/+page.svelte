@@ -61,6 +61,6 @@
 	<title>Change Password</title>
 	<meta
 		name="description"
-		content="Confirm your password reset and create a new password for AdventureLog."
+		content="Confirm your password reset and create a new password for Travel Architecture."
 	/>
 </svelte:head>

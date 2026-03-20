@@ -136,7 +136,7 @@
 </script>
 
 <svelte:head>
-	<title>{$t('adventures.visit_calendar')} - AdventureLog</title>
+	<title>{$t('adventures.visit_calendar')} - Travel Architecture</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gradient-to-br from-base-200 via-base-100 to-base-200">

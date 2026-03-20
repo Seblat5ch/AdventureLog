@@ -30,6 +30,6 @@
 </div>
 
 <svelte:head>
-	<title>{user.username} | AdventureLog</title>
+	<title>{user.username} | Travel Architecture</title>
 	<meta name="description" content="View your adventure collections." />
 </svelte:head>

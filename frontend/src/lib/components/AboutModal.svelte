@@ -46,11 +46,11 @@
 		<div class="flex items-center justify-between mb-6">
 			<div class="flex items-center gap-3">
 				<div class="p-2 bg-primary/10 rounded-lg">
-					<img src="/favicon.png" alt="AdventureLog" class="w-12 h-12" />
+					<img src="/favicon.png" alt="Travel Architecture" class="w-12 h-12" />
 				</div>
 				<div>
 					<h1 class="text-2xl font-bold text-primary">
-						{$t('about.about')} AdventureLog
+						{$t('about.about')} Travel Architecture
 					</h1>
 				</div>
 			</div>

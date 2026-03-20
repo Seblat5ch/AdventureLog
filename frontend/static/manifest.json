@@ -1,16 +1,16 @@
 {
-	"short_name": "AdventureLog",
-	"name": "AdventureLog",
+	"short_name": "Travel Architecture",
+	"name": "Travel Architecture by FaberCollins",
 	"start_url": "/dashboard",
 	"icons": [
 		{
-			"src": "adventurelog.svg",
-			"type": "image/svg+xml",
-			"sizes": "any"
+			"src": "favicon.png",
+			"type": "image/png",
+			"sizes": "512x512"
 		}
 	],
 	"background_color": "#2a323c",
 	"display": "standalone",
 	"scope": "/",
-	"description": "Self-hostable travel tracker and trip planner."
+	"description": "Travel Architecture by FaberCollins — crafting your African journey."
 }

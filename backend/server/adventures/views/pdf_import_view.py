@@ -169,26 +169,29 @@ def _run_agent(pdf_text, user, pdf_filename, pdf_bytes, task_id):
 
         @tool
         def add_location(name: str, description: str, latitude: float, longitude: float,
-                         category: str = "general", category_icon: str = "🌍") -> str:
+                         category: str = "general", category_icon: str = "🌍",
+                         english_name: str = "") -> str:
             """Add a destination to the trip.
             Args:
-                name: Place name
+                name: Place name in the PDF's language (displayed to user)
                 description: What happens here (2-3 sentences)
                 latitude: Lat coordinate
                 longitude: Lng coordinate
                 category: Category name like: national_park, city, lake, lodge, restaurant, airport, wetland, viewpoint, wildlife, cultural, general
                 category_icon: Emoji icon for the category (e.g. 🏞️ for parks, 🏙️ for cities, 🌊 for lakes, 🍽️ for restaurants, ✈️ for airports, 🦁 for wildlife, 🏛️ for cultural)
+                english_name: The well-known ENGLISH name for geocoding (e.g. 'Cape of Good Hope' not 'Kap der Guten Hoffnung'). Use the common/short name that Google Maps would recognize.
             """
             # Get or create the category for this user
             cat, _ = Category.objects.get_or_create(
                 user=ctx['user'], name=category.lower().strip(),
                 defaults={'display_name': category.replace('_', ' ').title(), 'icon': category_icon}
             )
-            # Geocode the location by name for accurate coordinates
+            # Geocode using the English name for better results
+            geocode_name = english_name or name
             lat, lng = latitude, longitude
             from adventures.geocoding import search as geo_search
             try:
-                results = geo_search(name)
+                results = geo_search(geocode_name)
                 if isinstance(results, list) and results:
                     lat = float(results[0].get('lat', latitude))
                     lng = float(results[0].get('lon', longitude))
@@ -418,6 +421,7 @@ Given travel PDF text, you must:
    - A descriptive name in the PDF's language (e.g. "Gorilla-Tracking im Bwindi" for German PDFs)
    - A rich description (2-3 sentences) in the PDF's language
    - Approximate lat/lng for known places
+   - ALWAYS provide english_name with the well-known ENGLISH name for geocoding (e.g. "Cape of Good Hope" not "Kap der Guten Hoffnung", "Groot Constantia Wine Estate" not "Groot Constantia Weingut")
 3. For each location, call add_image_to_location with the ENGLISH common name as search_query.
    - CRITICAL: Always use the well-known ENGLISH name for image search, NOT the PDF language.
    - Example: search "Groot Constantia Wine Estate" not "Groot Constantia Weingut"
