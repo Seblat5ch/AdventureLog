@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from adventures.views import *
-from adventures.views.pdf_import_view import PdfImportView, PdfImportStatusView
+from adventures.views.pdf_import_view import PdfImportView, PdfImportStatusView, PdfImportCollectionStatusView, PdfImportRegenerateView
 from adventures.views.sso_login_view import SsoLoginView
 
 router = DefaultRouter()
@@ -32,5 +32,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('import-pdf/', PdfImportView.as_view(), name='import-pdf'),
     path('import-pdf/<str:task_id>/', PdfImportStatusView.as_view(), name='import-pdf-status'),
+    path('import-pdf/collection/<str:collection_id>/status/', PdfImportCollectionStatusView.as_view(), name='import-pdf-collection-status'),
+    path('import-pdf/collection/<str:collection_id>/regenerate/', PdfImportRegenerateView.as_view(), name='import-pdf-regenerate'),
     path('sso-login/', SsoLoginView.as_view(), name='sso-login'),
 ]

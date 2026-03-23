@@ -68,6 +68,104 @@
 	let calendarLocation = '';
 	let calendarDescription = '';
 
+	// PDF import generation status
+	let isGenerating = false;
+	let generatingProgress: string[] = [];
+	let generatingTaskId: string | null = null;
+	let hasPdfAttachment = false;
+	let isRegenerating = false;
+
+	async function checkGenerationStatus() {
+		if (!collection?.id) return;
+		try {
+			const res = await fetch(`/collections/import/upload?collection_id=${collection.id}`);
+			if (res.ok) {
+				const d = await res.json();
+				isGenerating = d.is_generating;
+				generatingProgress = d.progress || [];
+				generatingTaskId = d.task_id;
+				if (isGenerating && generatingTaskId) {
+					pollGenerationStatus(generatingTaskId);
+				}
+			}
+		} catch { /* ignore */ }
+	}
+
+	async function pollGenerationStatus(taskId: string) {
+		const maxAttempts = 120;
+		for (let i = 0; i < maxAttempts; i++) {
+			await new Promise((r) => setTimeout(r, 3000));
+			try {
+				const res = await fetch(`/collections/import/upload?task_id=${taskId}`);
+				if (!res.ok) continue;
+				const d = await res.json();
+				if (d.status === 'done') {
+					isGenerating = false;
+					isRegenerating = false;
+					addToast('success', 'AI import complete! Refreshing...');
+					window.location.reload();
+					return;
+				} else if (d.status === 'error') {
+					isGenerating = false;
+					isRegenerating = false;
+					addToast('error', d.error || 'AI agent failed.');
+					return;
+				}
+				if (d.progress?.length > 0) {
+					generatingProgress = d.progress;
+				}
+			} catch { /* keep polling */ }
+		}
+		isGenerating = false;
+		isRegenerating = false;
+	}
+
+	function checkForPdfAttachment() {
+		if (!collection) return;
+		const notes = (collection as any).notes || [];
+		for (const note of notes) {
+			const attachments = note.attachments || [];
+			for (const att of attachments) {
+				if (att.name && att.name.toLowerCase().endsWith('.pdf')) {
+					hasPdfAttachment = true;
+					return;
+				}
+			}
+		}
+	}
+
+	async function regenerateFromPdf() {
+		if (!collection?.id || isRegenerating) return;
+		isRegenerating = true;
+		isGenerating = true;
+		generatingProgress = ['♻️ Regenerating from stored PDF...'];
+		try {
+			const res = await fetch('/collections/import/upload', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ collection_id: collection.id }),
+			});
+			if (res.ok || res.status === 202) {
+				const d = await res.json();
+				if (d.task_id) {
+					generatingTaskId = d.task_id;
+					await pollGenerationStatus(d.task_id);
+				}
+			} else if (res.status === 409) {
+				addToast('info', 'Import already in progress.');
+			} else {
+				const err = await res.json();
+				addToast('error', err.error || 'Failed to regenerate.');
+				isGenerating = false;
+				isRegenerating = false;
+			}
+		} catch {
+			addToast('error', 'Network error.');
+			isGenerating = false;
+			isRegenerating = false;
+		}
+	}
+
 	// Shared helpers for keeping collection sub-items in sync after modal actions
 	type CollectionArrayKey = 'locations' | 'transportations' | 'lodging' | 'notes' | 'checklists';
 
@@ -666,6 +764,9 @@
 	onMount(async () => {
 		if (!collection) {
 			notFound = true;
+		} else {
+			checkForPdfAttachment();
+			await checkGenerationStatus();
 		}
 	});
 
@@ -993,6 +1094,37 @@
 						{/if}
 						{collection.name}
 					</h1>
+
+					<!-- AI Generation Status Banner -->
+					{#if isGenerating}
+						<div class="alert alert-info shadow-lg mb-4 max-w-xl mx-auto">
+							<span class="loading loading-spinner loading-sm"></span>
+							<div class="flex flex-col items-start">
+								<span class="font-semibold">AI is generating this itinerary...</span>
+								{#if generatingProgress.length > 0}
+									<span class="text-xs opacity-70">{generatingProgress[generatingProgress.length - 1]}</span>
+								{/if}
+							</div>
+						</div>
+					{/if}
+
+					<!-- Regenerate Button (staff only, when PDF exists and not generating) -->
+					{#if hasPdfAttachment && !isGenerating && data.user?.is_staff}
+						<div class="mb-4">
+							<button
+								class="btn btn-outline btn-sm gap-2"
+								on:click={regenerateFromPdf}
+								disabled={isRegenerating}
+							>
+								{#if isRegenerating}
+									<span class="loading loading-spinner loading-xs"></span>
+								{:else}
+									♻️
+								{/if}
+								Regenerate from PDF
+							</button>
+						</div>
+					{/if}
 
 					<!-- Quick Info Badges -->
 					<div class="flex flex-wrap justify-center gap-4 mb-6">

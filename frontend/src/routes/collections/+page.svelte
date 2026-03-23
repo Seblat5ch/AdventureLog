@@ -27,6 +27,8 @@
 	let pdfFile: File | null = null;
 	let pdfUploading = false;
 	let pdfProgress = '';
+	let pdfProgressList: string[] = [];
+	let pdfTaskId: string | null = null;
 	let pdfInputEl: HTMLInputElement | null = null;
 
 	function handlePdfSelect(e: Event) {
@@ -46,27 +48,33 @@
 				const d = await res.json();
 				if (d.status === 'done' && d.collection) {
 					addToast('success', `Trip "${d.collection.name}" created!`);
+					pdfUploading = false;
+					pdfTaskId = null;
 					showPdfImportModal = false;
 					window.location.href = `/collections/${d.collection.id}`;
 					return;
 				} else if (d.status === 'error') {
 					addToast('error', d.error || 'AI agent failed.');
 					pdfUploading = false;
+					pdfTaskId = null;
 					return;
 				}
 				if (d.status === 'running' && d.progress?.length > 0) {
+					pdfProgressList = d.progress;
 					pdfProgress = d.progress[d.progress.length - 1];
 				}
 			} catch { /* keep polling */ }
 		}
 		addToast('error', 'Import timed out.');
 		pdfUploading = false;
+		pdfTaskId = null;
 	}
 
 	async function uploadPdf() {
 		if (!pdfFile) return;
 		pdfUploading = true;
 		pdfProgress = 'Uploading PDF...';
+		pdfProgressList = [];
 		try {
 			const formData = new FormData();
 			formData.append('pdf', pdfFile);
@@ -74,6 +82,7 @@
 			if (res.ok || res.status === 202) {
 				const d = await res.json();
 				if (d.task_id) {
+					pdfTaskId = d.task_id;
 					pdfProgress = 'AI is generating your itinerary...';
 					await pollPdfStatus(d.task_id);
 				}
@@ -934,10 +943,17 @@
 		<div class="modal-box max-w-lg">
 			<h3 class="font-bold text-lg mb-4">Import Travel PDF (AI)</h3>
 			{#if pdfUploading}
-				<div class="flex flex-col items-center gap-4 py-8">
+				<div class="flex flex-col items-center gap-4 py-4">
 					<span class="loading loading-spinner loading-lg text-primary"></span>
 					<p class="text-lg font-medium">{pdfProgress}</p>
-					<p class="text-sm text-base-content/50">This may take a few minutes...</p>
+					<p class="text-sm text-base-content/50">This may take a few minutes. You can close this dialog and come back — the import continues in the background.</p>
+					{#if pdfProgressList.length > 0}
+						<div class="w-full max-h-48 overflow-y-auto bg-base-200 rounded-lg p-3 mt-2">
+							{#each pdfProgressList as item}
+								<p class="text-xs text-base-content/70 py-0.5">{item}</p>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{:else if pdfFile}
 				<div class="flex flex-col items-center gap-4 py-4">
@@ -961,11 +977,11 @@
 				<input bind:this={pdfInputEl} type="file" accept=".pdf" class="hidden" on:change={handlePdfSelect} />
 			{/if}
 			<div class="modal-action">
-				{#if !pdfUploading}
-					<button class="btn" on:click={() => (showPdfImportModal = false)}>Cancel</button>
-				{/if}
+				<button class="btn" on:click={() => (showPdfImportModal = false)}>
+					{pdfUploading ? 'Close (continues in background)' : 'Cancel'}
+				</button>
 			</div>
 		</div>
-		<div class="modal-backdrop" on:click={() => { if (!pdfUploading) showPdfImportModal = false; }}></div>
+		<div class="modal-backdrop" on:click={() => (showPdfImportModal = false)}></div>
 	</dialog>
 {/if}

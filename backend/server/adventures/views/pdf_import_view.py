@@ -871,3 +871,105 @@ class PdfImportStatusView(APIView):
             del _tasks[task_id]
 
         return Response(result)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PdfImportCollectionStatusView(APIView):
+    """Check if a collection has an active PDF import task running."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, collection_id):
+        """Check if there's an active import task for this collection."""
+        for tid, task in _tasks.items():
+            if task.get('collection_id') == str(collection_id) and task.get('user_id') == request.user.id:
+                return Response({
+                    'is_generating': task['status'] in ('pending', 'running'),
+                    'status': task['status'],
+                    'progress': task.get('progress', []),
+                    'task_id': tid,
+                })
+        return Response({'is_generating': False, 'status': None, 'progress': [], 'task_id': None})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PdfImportRegenerateView(APIView):
+    """Re-run the AI agent on a collection's stored PDF attachment."""
+    parser_classes = [MultiPartParser]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, collection_id):
+        """Find the stored PDF in the collection's notes and re-run the agent."""
+        user = request.user
+
+        try:
+            collection = Collection.objects.get(id=collection_id, user=user)
+        except Collection.DoesNotExist:
+            return Response({'error': 'Collection not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if there's already an active task for this collection
+        for tid, task in _tasks.items():
+            if task.get('collection_id') == str(collection_id) and task['status'] in ('pending', 'running'):
+                return Response({'error': 'Import already in progress.', 'task_id': tid},
+                                status=status.HTTP_409_CONFLICT)
+
+        # Find the PDF attachment in the collection's notes
+        pdf_attachment = None
+        for note in Note.objects.filter(collection=collection):
+            for att in ContentAttachment.objects.filter(
+                content_type=ContentType.objects.get_for_model(Note),
+                object_id=note.id
+            ):
+                if att.name and att.name.lower().endswith('.pdf'):
+                    pdf_attachment = att
+                    break
+            if pdf_attachment:
+                break
+
+        if not pdf_attachment:
+            return Response({'error': 'No PDF found in this collection. Upload a new PDF instead.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Read the PDF bytes
+        try:
+            pdf_bytes = pdf_attachment.file.read()
+            pdf_filename = pdf_attachment.name
+        except Exception as e:
+            return Response({'error': f'Could not read PDF: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        pdf_text = _extract_pdf_text(pdf_bytes)
+        if not pdf_text or len(pdf_text) < 50:
+            return Response({'error': 'Could not extract text from stored PDF.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Delete existing items from the collection (locations are M2M so just unlink them)
+        collection.locations.clear()
+        Transportation.objects.filter(collection=collection).delete()
+        Lodging.objects.filter(collection=collection).delete()
+        # Keep notes and checklists that aren't the PDF source note
+        Note.objects.filter(collection=collection).exclude(
+            id__in=Note.objects.filter(
+                collection=collection,
+                attachments__name__iendswith='.pdf'
+            ).values_list('id', flat=True)
+        ).delete()
+        Checklist.objects.filter(collection=collection).delete()
+        CollectionItineraryItem.objects.filter(collection=collection).delete()
+        CollectionItineraryDay.objects.filter(collection=collection).delete()
+
+        # Start the agent
+        task_id = str(uuid.uuid4())
+        _tasks[task_id] = {
+            'status': 'pending', 'collection_id': str(collection.id),
+            'error': None, 'user_id': user.id, 'progress': ['♻️ Regenerating from stored PDF...']
+        }
+
+        thread = threading.Thread(
+            target=_run_agent,
+            args=(pdf_text, user, pdf_filename, pdf_bytes, task_id),
+            daemon=True,
+        )
+        thread.start()
+
+        return Response({'task_id': task_id, 'collection_id': str(collection.id)},
+                        status=status.HTTP_202_ACCEPTED)
