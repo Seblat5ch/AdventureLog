@@ -19,7 +19,9 @@ WORKDIR /code
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies needed for build
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Apply latest OS security patches (Shepherd VMRO:Quibbler remediation - per FAQ Q13)
+# to ensure CVE fixes are picked up even before the base image is rebuilt upstream.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
       git \
       postgresql-client \
       gdal-bin \
@@ -42,7 +44,10 @@ ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime dependencies (including GDAL)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Apply latest OS security patches (Shepherd VMRO:Quibbler remediation - per FAQ Q13)
+# to ensure CVE fixes for python3.13, nginx, postgresql-17, glibc, linux, systemd, etc.
+# are picked up even before the base image is rebuilt upstream.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
       postgresql-client \
       gdal-bin \
       libgdal-dev \
