@@ -18,8 +18,11 @@ LABEL maintainer="Sean Morley" \
 # The WORKDIR instruction sets the working directory for everything that will happen next
 WORKDIR /app
 
-# Install pnpm globally first
-RUN npm install -g pnpm
+# Install pnpm globally first.
+# Pin to v10: pnpm v11 dropped reading the `pnpm` field from package.json, so it
+# ignores pnpm.overrides and mismatches the committed lockfile (overrides), which
+# breaks `pnpm install --frozen-lockfile` (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH).
+RUN npm install -g pnpm@10.34.1
 
 # Copy package files first for better Docker layer caching
 COPY package.json pnpm-lock.yaml* ./

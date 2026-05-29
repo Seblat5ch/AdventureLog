@@ -47,18 +47,36 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Apply latest OS security patches (Shepherd VMRO:Quibbler remediation - per FAQ Q13)
 # to ensure CVE fixes for python3.13, nginx, postgresql-17, glibc, linux, systemd, etc.
 # are picked up even before the base image is rebuilt upstream.
+#
+# NOTE: postgresql-client is intentionally NOT installed. It depends on perl, which
+# currently ships unpatched CVEs (e.g. CVE-2026-42496 Archive::Tar, CRITICAL) that
+# Debian trixie has no fix for yet and that page us via Shepherd. The DB-readiness
+# check in entrypoint.sh uses Django/psycopg2 instead, so psql is not needed at runtime.
+# We then purge the full perl interpreter + modules (NOT the Essential perl-base, which
+# does not contain Archive::Tar) so the flagged package is absent from the dpkg DB that
+# Inspector/Shepherd scans. gdal-bin 3.5+ dropped its perl bindings, so GDAL is unaffected.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-      postgresql-client \
       gdal-bin \
       libgdal-dev \
       nginx \
       memcached \
       supervisor \
+    && ( apt-get purge -y perl 'perl-modules-*' || true ) \
+    && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Fail the build loudly if removing perl/postgresql-client broke the runtime stack.
+# This is a safety gate: a broken image never reaches ECS (the pipeline stops here),
+# so the currently-healthy task keeps running instead of deploying a broken container.
+RUN set -e; \
+    echo "Smoke test: perl must be absent; Django + GDAL must load"; \
+    if dpkg -l perl 2>/dev/null | grep -q '^ii'; then echo "FAIL: perl still installed"; exit 1; fi; \
+    python3 -c "import django; print('django', django.get_version())"; \
+    python3 -c "from django.contrib.gis.gdal import gdal_version; print('gdal', gdal_version())"
 
 # Copy project code and configs
 COPY ./server /code/

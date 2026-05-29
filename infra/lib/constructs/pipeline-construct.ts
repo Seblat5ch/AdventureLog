@@ -69,9 +69,12 @@ export class PipelineConstruct extends Construct {
               // --no-cache --pull is critical for the scheduled daily rebuild:
               // forces fetch of the latest base image and re-runs apt-get upgrade
               // so OS-layer CVE fixes land each rebuild even with no source change.
-              'echo Building backend image (no cache, fresh base)...',
+              // NOTE: echo messages MUST be quoted. CodeBuild runs each command in
+              // /bin/sh (dash); unquoted parentheses are parsed as subshell syntax
+              // and abort the build before docker runs (Shepherd re-flag root cause).
+              "echo 'Building backend image (no cache, fresh base)...'",
               'docker build --no-cache --pull -t $BACKEND_REPO_URI:latest -t $BACKEND_REPO_URI:$IMAGE_TAG -f backend/Dockerfile backend/',
-              'echo Building frontend image (no cache, fresh base)...',
+              "echo 'Building frontend image (no cache, fresh base)...'",
               'docker build --no-cache --pull -t $FRONTEND_REPO_URI:latest -t $FRONTEND_REPO_URI:$IMAGE_TAG -f frontend/Dockerfile frontend/',
             ],
           },

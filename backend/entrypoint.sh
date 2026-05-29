@@ -1,29 +1,11 @@
 #!/bin/bash
 
 # Function to check PostgreSQL availability
-# Helper to get the first non-empty environment variable
-get_env() {
-  for var in "$@"; do
-    value="${!var}"
-    if [ -n "$value" ]; then
-      echo "$value"
-      return
-    fi
-  done
-}
-
+# Uses Django's own DB connection (psycopg2) instead of the `psql` CLI so the image
+# does not need postgresql-client -> perl, which pulls in unpatched perl CVEs
+# (e.g. CVE-2026-42496 Archive::Tar) flagged by Shepherd with no Debian fix yet.
 check_postgres() {
-  local db_host
-  local db_user
-  local db_name
-  local db_pass
-
-  db_host=$(get_env PGHOST)
-  db_user=$(get_env PGUSER POSTGRES_USER)
-  db_name=$(get_env PGDATABASE POSTGRES_DB)
-  db_pass=$(get_env PGPASSWORD POSTGRES_PASSWORD)
-
-  PGPASSWORD="$db_pass" psql -h "$db_host" -U "$db_user" -d "$db_name" -c '\q' >/dev/null 2>&1
+  python manage.py shell -c "from django.db import connection; connection.ensure_connection()" >/dev/null 2>&1
 }
 
 
